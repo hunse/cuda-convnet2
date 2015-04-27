@@ -34,6 +34,9 @@ export PYTHON_INCLUDE_PATH=/usr/include/python2.7
 # Numpy include directory. This should contain the file arrayobject.h, among others.
 export NUMPY_INCLUDE_PATH=/usr/lib/python2.7/dist-packages/numpy/core/include/numpy/
 
+# OpenCV include directory. This should contain the file opencv2/opencv.hpp, among others.
+export OPENCV_INCLUDE_PATH=/opt/opencv/include
+
 # ATLAS library directory. This should contain the file libcblas.so, among others.
 export ATLAS_LIB_PATH=/usr/lib/atlas-base
 
