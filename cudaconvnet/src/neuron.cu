@@ -22,19 +22,19 @@ using namespace std;
 Neuron& Neuron::makeNeuron(PyObject* neuronDict) {
     std::string type = pyDictGetString(neuronDict, "type");
     PyObject* neuronParamsDict = PyDict_GetItemString(neuronDict, "params");
-    
+
     if (type == "relu") {
         return *new ReluNeuron();
     }
-    
+
     if (type == "drelu") {
         return *new DoubleReluNeuron(pyDictGetFloat(neuronParamsDict, "a"));
     }
-    
+
     if (type == "softrelu") {
         return *new SoftReluNeuron();
     }
-    
+
     if (type == "brelu") {
         return *new BoundedReluNeuron(pyDictGetFloat(neuronParamsDict, "a"));
     }
@@ -46,19 +46,19 @@ Neuron& Neuron::makeNeuron(PyObject* neuronDict) {
     if (type == "logistic") {
         return *new LogisticNeuron();
     }
-    
+
     if (type == "tanh") {
         return *new TanhNeuron(pyDictGetFloat(neuronParamsDict, "a"), pyDictGetFloat(neuronParamsDict, "b"));
     }
-    
+
     if (type == "square") {
         return *new SquareNeuron();
     }
-    
+
     if (type == "sqrt") {
         return *new SqrtNeuron();
     }
-    
+
     if (type == "linear") {
         return *new LinearNeuron(pyDictGetFloat(neuronParamsDict, "a"), pyDictGetFloat(neuronParamsDict, "b"));
     }
@@ -70,6 +70,10 @@ Neuron& Neuron::makeNeuron(PyObject* neuronDict) {
     if (type == "ident") {
         return *new Neuron();
     }
-    
+
+    if (type == "softlif") {
+        return *new SoftLifNeuron(pyDictGetFloat(neuronParamsDict, "a"));
+    }
+
     throw std::string("Unknown neuron type: ") + type;
 }
