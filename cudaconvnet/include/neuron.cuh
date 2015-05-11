@@ -567,10 +567,15 @@ protected:
     }
 public:
 
-    static const float tau_ref = 0.002f;
+    // static const float tau_ref = 0.002f;
+    // static const float tau_rc = 0.05f;
+    // static const float alpha = 6.3f;
+    // static const float amp = 10.0f * tau_ref;
+
+    static const float tau_ref = 0.001f;
     static const float tau_rc = 0.05f;
-    static const float alpha = 6.3f;
-    static const float amp = 10.0f * tau_ref;
+    static const float alpha = 0.825f;
+    static const float amp = 0.063f;
 
     class SoftLifOperator {
     private:
