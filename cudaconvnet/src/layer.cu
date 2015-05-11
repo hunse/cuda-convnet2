@@ -36,7 +36,7 @@ Layer::Layer(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID, 
              _convNetThread(convNetThread),  _replicaID(replicaID), _trans(trans) {
     _name = pyDictGetString(paramsDict, "name");
     _type = pyDictGetString(paramsDict, "type");
-   
+
     _foundGradConsumers = false;
     _gradConsumer = pyDictGetInt(paramsDict, "gradConsumer");
     _actsTarget = pyDictGetInt(paramsDict, "actsTarget");
@@ -141,7 +141,7 @@ void Layer::fprop(map<int,NVMatrix*>& v, PASS_TYPE passType, int passIdx) {
                 it->second->transpose(_trans);
             }
             getActs().transpose(_trans);
-   
+
             fpropCommon(passType);
 
             // First do fprop on the input whose acts matrix I'm sharing, if any
@@ -194,7 +194,7 @@ void Layer::bprop(PASS_TYPE passType, int passIdx) {
 
         // This does sync, but only if it has grad consumers below! so we must sync again before sending bprop terminal messages
         bprop(getActsGrad(), passType, passIdx);
-       
+
         if (_bwdTerminal[passIdx]) {
             syncStream();
             getConvNet().getMessageQueue().enqueue(new Message(BPROP_TERMINAL));
@@ -1016,7 +1016,7 @@ LocalLayer::LocalLayer(ConvNetThread* convNetThread, PyObject* paramsDict, int r
     _filterChannels = pyDictGetIntV(paramsDict, "filterChannels");
     _filterPixels = pyDictGetIntV(paramsDict, "filterPixels");
     _imgPixels = pyDictGetIntV(paramsDict, "imgPixels");
-   
+
     _modulesX = pyDictGetInt(paramsDict, "modulesX");
     _modules = pyDictGetInt(paramsDict, "modules");
 }
@@ -1467,7 +1467,7 @@ int DataLayer::getNumInputReplicas() {
 }
 
 void DataLayer::fpropActs(int inpIdx, float scaleTargets, PASS_TYPE passType, int passIdx) {
-   
+
 }
 
 NVMatrix& DataLayer::getActs(int deviceID) {
@@ -1732,14 +1732,14 @@ RandomScaleLayer::RandomScaleLayer(ConvNetThread* convNetThread, PyObject* param
     _tgtSize = pyDictGetInt(paramsDict, "tgtSize");
     // The smallest size the image could be after rescaling
     _minScaledSize = _imgSize / _maxScale;
-   
+
     // The number of discrete scales we're considering
     int numScales = _imgSize - _minScaledSize + 1;
-   
+
     // The total number of squares of size _tgtSize that we can extract
     // from all these scales
     double numCrops = numScales * (numScales + 1) * (2 * numScales + 1) / 6;
-   
+
     // For each scale, record the fraction of the squares that it has.
     // This will be the probability of sampling this scale.
     _scaleProbs.push_back(1.0 / numCrops);
@@ -2053,6 +2053,8 @@ CostLayer& CostLayer::make(ConvNetThread* convNetThread, PyObject* paramsDict, s
         return *new DetectionCrossEntropyCostLayer(convNetThread, paramsDict, replicaID);
     } else if (type == "cost.logreg") {
         return *new LogregCostLayer(convNetThread, paramsDict, replicaID);
+    } else if (type == "cost.hingeloss") {
+        return *new HingeLossCostLayer(convNetThread, paramsDict, replicaID);
     } else if (type == "cost.sum2") {
         return *new SumOfSquaresCostLayer(convNetThread, paramsDict, replicaID);
     }
@@ -2288,6 +2290,51 @@ void LogregCostLayer::bpropActs(NVMatrix& v, int replicaIdx, int inpIdx, float s
 
 /*
  * =====================
+ * HingeLossCostLayer
+ * =====================
+ */
+HingeLossCostLayer::HingeLossCostLayer(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID) : CostLayer(convNetThread, paramsDict, replicaID, false) {
+}
+
+void HingeLossCostLayer::fpropActs(int inpIdx, float scaleTargets, PASS_TYPE passType, int passIdx) {
+    // This layer uses its two inputs together
+    if (inpIdx == 0) {
+        // TODO: need special code for multiview test?
+
+        NVMatrix& labels = *_inputs[0];
+        NVMatrix& values = *_inputs[1];
+        int numCases = labels.getLeadingDim();
+        computeHingeLossCost(labels, values, _hingeLosses, _correctProbs);
+        _costv.clear();
+        _costv.push_back(_hingeLosses.sum(_tmpbuf));
+        _costv.push_back(numCases - _correctProbs.sum(_tmpbuf));
+        // TODO: compute top-k error (need top-5 error for ImageNet)
+    }
+}
+
+void HingeLossCostLayer::bpropActs(NVMatrix& v, int replicaIdx, int inpIdx, float scaleTargets, PASS_TYPE passType) {
+    if (inpIdx == 1) {
+        LayerV& prev = _prev[replicaIdx];
+        NVMatrix& labels = *_inputs[0];
+        NVMatrix& probs = *_inputs[1];
+        NVMatrix& target = prev[1]->getActsGrad();
+        computeHingeLossGrad(labels, probs, target, scaleTargets == 1, _coeff);
+
+        // // Numerical stability optimization: if the layer below me is a softmax layer, let it handle
+        // // the entire gradient computation to avoid multiplying and dividing by a near-zero quantity.
+        // bool doWork = prev[1]->getNext().size() > 1 || prev[1]->getType() != "softmax"
+        //             || prev[1]->getDeviceID() != getDeviceID() || prev[1]->getNumReplicas() != getNumReplicas();
+        // if (prev[1]->getType() == "softmax") {
+        //     static_cast<SoftmaxLayer*>(prev[1])->setDoUpperGrad(!doWork);
+        // }
+        // if (doWork) {
+        //     computeLogregGrad(labels, probs, target, scaleTargets == 1, _coeff);
+        // }
+    }
+}
+
+/*
+ * =====================
  * SumOfSquaresCostLayer
  * =====================
  */
@@ -2303,4 +2350,3 @@ void SumOfSquaresCostLayer::fpropActs(int inpIdx, float scaleTargets, PASS_TYPE 
 void SumOfSquaresCostLayer::bpropActs(NVMatrix& v, int replicaIdx, int inpIdx, float scaleTargets, PASS_TYPE passType) {
     _prev[replicaIdx][inpIdx]->getActsGrad().add(*_inputs[0], scaleTargets, -2 * _coeff);
 }
-

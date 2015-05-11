@@ -1431,6 +1431,31 @@ class LogregCostParser(CostParser):
         print "Initialized logistic regression cost '%s' on GPUs %s" % (name, dic['gpus'])
         return dic
 
+class HingeLossCostParser(CostParser):
+    def __init__(self):
+        CostParser.__init__(self, num_inputs=2)
+
+    def add_params(self, mcp):
+        CostParser.add_params(self, mcp)
+        dic, name = self.dic, self.dic['name']
+        # dic['topk'] = mcp.safe_get_int(name, 'topk', default=1)
+        # if dic['topk'] > dic['numInputs'][1]:
+        #     raise LayerParsingError("Layer '%s': parameter 'topk'must not have value greater than the number of classess."  % (name))
+
+    def parse(self, name, mcp, prev_layers, model):
+        dic = CostParser.parse(self, name, mcp, prev_layers, model)
+        dic['requiresParams'] = True
+        if dic['numInputs'][0] != 1: # first input must be labels
+            raise LayerParsingError("Layer '%s': dimensionality of first input must be 1" % name)
+        # if dic['inputLayers'][1]['type'] != 'softmax':
+        #     raise LayerParsingError("Layer '%s': second input must be softmax layer" % name)
+        if dic['numInputs'][1] != model.train_data_provider.get_num_classes():
+            raise LayerParsingError("Layer '%s': input '%s' must produce %d outputs, because that is the number of classes in the dataset" \
+                                    % (name, dic['inputs'][1], model.train_data_provider.get_num_classes()))
+
+        print "Initialized hinge loss cost '%s' on GPUs %s" % (name, dic['gpus'])
+        return dic
+
 class BinomialCrossEntCostParser(CostParser):
     def __init__(self):
         CostParser.__init__(self, num_inputs=2)
@@ -1510,6 +1535,7 @@ layer_parsers = {'data' :           lambda : DataLayerParser(),
                  'cost.crossent':   lambda : CrossEntCostParser(),
                  'cost.bce':        lambda : BinomialCrossEntCostParser(),
                  'cost.dce':        lambda : DetectionCrossEntCostParser(),
+                 'cost.hingeloss':  lambda : HingeLossCostParser(),
                  'cost.sum2':       lambda : SumOfSquaresCostParser()}
 
 # All the neuron parsers

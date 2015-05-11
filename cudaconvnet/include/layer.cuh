@@ -120,9 +120,9 @@ protected:
     bool _initialized;
 
     virtual void fpropNext(PASS_TYPE passType, int passIdx);
-    virtual void truncBwdActs(); 
+    virtual void truncBwdActs();
     virtual void fpropActs(int inpIdx, float scaleTargets, PASS_TYPE passType, int passIdx) = 0;
-    
+
     virtual void bpropCommon(NVMatrix& v, int replicaIdx, PASS_TYPE passType) {
         // Do nothing by default
     }
@@ -141,10 +141,10 @@ protected:
 
 public:
     static bool _saveActsGrad, _saveActs;
-    
+
     Layer(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID, bool trans);
     virtual ~Layer();
-    
+
     virtual bool fprop(PASS_TYPE passType, int passIdx);
     void fprop(NVMatrix& v, int inpIdx, PASS_TYPE passType, int passIdx);
     virtual void fprop(std::map<int,NVMatrix*>& v, PASS_TYPE passType, int passIdx);
@@ -232,7 +232,7 @@ class NeuronLayer : public Layer {
 protected:
     Neuron* _neuron;
     std::string _neuronType;
-    
+
     virtual void fpropActs(int inpIdx, float scaleTargets, PASS_TYPE passType, int passIdx);
     virtual void bpropActs(NVMatrix& v, int replicaIdx, int inpIdx, float scaleTargets, PASS_TYPE passType);
     virtual bool bpropSpecial(NVMatrix& v, int replicaIdx, int inpIdx, float scaleTargets, PASS_TYPE passType);
@@ -381,15 +381,15 @@ protected:
 public:
     DataCopyMessage(CPUData& cpuData, bool other, int passIdx) : _cpuData(&cpuData), _other(other), _passIdx(passIdx), _type(DataCopyMessage::COPY) {
     }
-    
+
     CPUData& getData() const {
         return *_cpuData;
     }
-    
+
     int getPassIdx() const {
         return _passIdx;
     }
-    
+
     bool isOther() const {
         return _other;
     }
@@ -420,7 +420,7 @@ protected:
     DataCopyThread* _copier;
     bool _outstandingCopyRequest;
     int _start, _end;
-    
+
 public:
     void fprop(PASS_TYPE passType, int passIdx, bool fromBuffer);
     DataLayer(ConvNet* convNet, PyObject* paramsDict, int replicaID);
@@ -459,7 +459,7 @@ protected:
     Timer _requestTimer;
     int _sleepUsec;
     virtual void* run();
-    
+
 public:
     DataCopyThread(DataLayer& parent, intv& cpus);
     Queue<DataCopyMessage*>& getQueue();
@@ -472,7 +472,7 @@ protected:
     intv* _padding, *_stride, *_filterSize, *_channels, *_imgSize, *_groups;
     intv* _imgPixels, *_filterPixels, *_filterChannels;
     int _modulesX, _modules, _numFilters;
-    
+
 public:
     LocalLayer(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID, bool useGrad);
     virtual ~LocalLayer();
@@ -495,7 +495,7 @@ protected:
 public:
     ConvLayer(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID);
     virtual ~ConvLayer();
-}; 
+};
 
 class LocalUnsharedLayer : public LocalLayer {
 protected:
@@ -506,7 +506,7 @@ protected:
     void _constrainWeights();
 public:
     LocalUnsharedLayer(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID);
-}; 
+};
 
 class PoolLayer : public Layer, public TwoDLayerInterface {
 protected:
@@ -514,9 +514,9 @@ protected:
     std::string _pool;
 public:
     PoolLayer(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID, bool trans);
-    
+
     static PoolLayer& make(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID);
-}; 
+};
 
 class AvgPoolLayer : public PoolLayer {
 protected:
@@ -525,7 +525,7 @@ protected:
     void bpropActs(NVMatrix& v, int replicaIdx, int inpIdx, float scaleTargets, PASS_TYPE passType);
 public:
     AvgPoolLayer(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID);
-}; 
+};
 
 class MaxPoolLayer : public PoolLayer {
 protected:
@@ -563,7 +563,7 @@ protected:
 public:
     void fpropActs(int inpIdx, float scaleTargets, PASS_TYPE passType, int passIdx);
     void bpropActs(NVMatrix& v, int replicaIdx, int inpIdx, float scaleTargets, PASS_TYPE passType);
-    
+
     RandomScaleLayer(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID);
 };
 
@@ -583,7 +583,7 @@ protected:
 public:
     void fpropActs(int inpIdx, float scaleTargets, PASS_TYPE passType, int passIdx);
     void bpropActs(NVMatrix& v, int replicaIdx, int inpIdx, float scaleTargets, PASS_TYPE passType);
-    
+
     NailbedLayer(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID);
 };
 
@@ -596,7 +596,7 @@ public:
     void fpropActs(int inpIdx, float scaleTargets, PASS_TYPE passType, int passIdx);
     void bpropActs(NVMatrix& v, int replicaIdx, int inpIdx, float scaleTargets, PASS_TYPE passType);
     void copyToGPU();
-    
+
     GaussianBlurLayer(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID);
     ~GaussianBlurLayer();
 };
@@ -606,7 +606,7 @@ protected:
 public:
     void fpropActs(int inpIdx, float scaleTargets, PASS_TYPE passType, int passIdx);
     void bpropActs(NVMatrix& v, int replicaIdx, int inpIdx, float scaleTargets, PASS_TYPE passType);
-    
+
     HorizontalReflectionLayer(ConvNetThread* convNet, PyObject* paramsDict, int replicaID);
 };
 
@@ -681,7 +681,7 @@ protected:
     void truncBwdActs();
 public:
     ResponseNormLayer(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID);
-}; 
+};
 
 class CrossMapResponseNormLayer : public ResponseNormLayer {
 protected:
@@ -690,12 +690,12 @@ protected:
     void bpropActs(NVMatrix& v, int replicaIdx, int inpIdx, float scaleTargets, PASS_TYPE passType);
 public:
     CrossMapResponseNormLayer(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID);
-}; 
+};
 
 class ContrastNormLayer : public ResponseNormLayer {
 protected:
     NVMatrix _meanDiffs;
-    
+
     void fpropActs(int inpIdx, float scaleTargets, PASS_TYPE passType, int passIdx);
     void bpropActs(NVMatrix& v, int replicaIdx, int inpIdx, float scaleTargets, PASS_TYPE passType);
     void truncBwdActs();
@@ -715,14 +715,14 @@ public:
     CostLayer(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID, bool trans);
     void bprop(NVMatrix& v, PASS_TYPE passType, int passIdx);
     bool fprop(PASS_TYPE passType, int passIdx);
-    
+
     int getNumCases();
     virtual doublev& getCost();
     float getCoeff();
     bool isGradProducer();
     void setSendTerminalMessages(bool send);
     void resetPassIdx();
-    
+
     static CostLayer& make(ConvNetThread* convNetThread, PyObject* paramsDict, std::string& type, int replicaID);
 };
 
@@ -799,6 +799,22 @@ public:
     DetectionCrossEntropyCostLayer(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID);
 };
 
+/*
+ * Input 0: labels
+ * Input 1: logistic outputs
+ */
+class HingeLossCostLayer : public CostLayer {
+protected:
+    // Matrix _hNumPositive, _hNumTruePositive, _hNumDeclaredPositive;
+    // NVMatrix _numPositive, _numTrueNegative, _numTruePositive, _numDeclaredPositive;
+    // void fpropActs(int inpIdx, float scaleTargets, PASS_TYPE passType, int passIdx);
+    NVMatrix _hingeLosses, _correctProbs;
+    void fpropActs(int inpIdx, float scaleTargets, PASS_TYPE passType, int passIdx);
+    void bpropActs(NVMatrix& v, int replicaIdx, int inpIdx, float scaleTargets, PASS_TYPE passType);
+public:
+    HingeLossCostLayer(ConvNetThread* convNetThread, PyObject* paramsDict, int replicaID);
+};
+
 class SumOfSquaresCostLayer : public CostLayer {
 protected:
     NVMatrix _tmp;
@@ -809,4 +825,3 @@ public:
 };
 
 #endif    /* LAYER_CUH */
-

@@ -10,6 +10,7 @@ LAYERS=(--layer-def ./layers/layers-cifar10-11pct.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-dropout.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-logavg.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-lifavg.cfg)
+# LAYERS=(--layer-def ./layers/layers-cifar10-hinge.cfg)
 
 LAYERS+=(--layer-params ./layers/layer-params-cifar10-11pct.cfg)
 

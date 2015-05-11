@@ -76,6 +76,8 @@ void computeSoftmaxGrad(NVMatrix& acts, NVMatrix& actsGrad, NVMatrix& target, fl
 void computeLogregCost(NVMatrix& labels, NVMatrix& probs, NVMatrix& maxProbs, NVMatrix& labelLogProbs_out, NVMatrix& correctProbs_out);
 void computeLogregGrad(NVMatrix& labels, NVMatrix& probs, NVMatrix& target, bool add, float coeff);
 
+void computeHingeLossCost(NVMatrix& labels, NVMatrix& values, NVMatrix& hingeLosses_out, NVMatrix& correctProbs_out);
+void computeHingeLossGrad(NVMatrix& labels, NVMatrix& values, NVMatrix& target, bool add, float coeff);
 
 // Numerical stability optimization: this routine combines computeLogregGrad with computeSoftmaxGrad
 // to avoi dividing and then multiplying by quantities that may be near zero.
@@ -85,4 +87,3 @@ void computeEltwiseMaxGrad(NVMatrix& actGrad, NVMatrix& input, NVMatrix& output,
 void computeMultiSoftmaxCost(NVMatrix& labels, NVMatrix& probs, NVMatrix& maxProbs, NVMatrix& labelLogProbs_out,
                              NVMatrix& correctProbs_out, NVMatrix& top5Probs_out, int setSize);
 #endif	/* LAYER_KERNELS_CUH */
-
