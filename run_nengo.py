@@ -323,7 +323,7 @@ with network:
     zp = nengo.Probe(outputs['logprob'], synapse=synapse)
 
 sim = nengo.Simulator(network)
-sim.run(15.)
+sim.run(100 * presentation_time)
 # sim.run(1.5)
 # sim.run(0.01)
 # sim.run(0.003)

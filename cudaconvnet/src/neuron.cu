@@ -72,7 +72,9 @@ Neuron& Neuron::makeNeuron(PyObject* neuronDict) {
     }
 
     if (type == "softlif") {
-        return *new SoftLifNeuron(pyDictGetFloat(neuronParamsDict, "a"));
+        return *new SoftLifNeuron(
+            pyDictGetFloat(neuronParamsDict, "g"),
+            pyDictGetFloat(neuronParamsDict, "n"));
     }
 
     throw std::string("Unknown neuron type: ") + type;

@@ -550,19 +550,20 @@ public:
  */
 class SoftLifNeuron : public Neuron {
 protected:
-    float _sigma;
+    float _g, _n;
 
     void _activate() {
-        _inputs->apply(SoftLifOperator(_sigma), *_outputs);
+        _outputs->randomizeGaussian(_n);  // fill _outputs with G(0, _n)
+        _inputs->applyBinary(SoftLifOperator(_g), *_outputs, *_outputs);
     }
 
     void _computeInputGrad(NVMatrix& actsGrad, NVMatrix& target) {
-        actsGrad.applyBinary(SoftLifGradientOperator(_sigma), *_inputs, target);
+        actsGrad.applyBinary(SoftLifGradientOperator(_g), *_inputs, target);
     }
 
     void _addInputGrad(NVMatrix& actsGrad, NVMatrix& target) {
         actsGrad.applyTernary(
-            AddGradientBinaryOperator<SoftLifGradientOperator>(SoftLifGradientOperator(_sigma)),
+            AddGradientBinaryOperator<SoftLifGradientOperator>(SoftLifGradientOperator(_g)),
             *_inputs, target, target);
     }
 public:
@@ -579,37 +580,39 @@ public:
 
     class SoftLifOperator {
     private:
-        float _sigma, _isigma;
+        float _g, _ig;
     public:
-        __device__ inline float operator()(float x) const {
-            float y = _isigma * alpha * x;
+        __device__ inline float operator()(float x, float n) const {
+            float y = _ig * alpha * x;
             float j = (y > 4.0f) ? y : log1pf(expf(y));
-            j *= _sigma;
-            return (j > 0.0f) ? __fdividef(
+            j *= _g;
+            float r = (j > 0.0f) ? __fdividef(
                 amp, tau_ref + tau_rc * log1pf(__fdividef(1.0f, j))) : 0.0f;
+            r += (y > 0.0f) ? (amp * n) : 0.0f;
+            return (r > 0.0f) ? r : 0.0f;
         }
 
-        SoftLifOperator(float sigma) : _sigma(sigma), _isigma(1.0f / sigma) {
+        SoftLifOperator(float g) : _g(g), _ig(1.0f / g) {
         }
     };
 
     class SoftLifGradientOperator {
     private:
-        float _sigma, _isigma;
+        float _g, _ig;
     public:
         __device__ inline float operator()(float unitActGrad, float unitInput) const  {
-            float y = _isigma * alpha * unitInput;
+            float y = _ig * alpha * unitInput;
             float j = (y > 4.0f) ? y : log1pf(expf(y));
-            j *= _sigma;
+            j *= _g;
             float vb = tau_ref + tau_rc * log1pf(__fdividef(1.0f, j));
             float den = vb * vb * j * (j + 1.0f) * (1.0f + __expf(-y));
             return (den > 0.0f) ? __fdividef(unitActGrad * alpha * tau_rc * amp, den) : 0.0f;
         }
 
-        SoftLifGradientOperator(float sigma) : _sigma(sigma), _isigma(1.0f / sigma) {
+        SoftLifGradientOperator(float g) : _g(g), _ig(1.0f / g) {
         }
     };
 
-    SoftLifNeuron(float a) : Neuron(), _sigma(a) {
+    SoftLifNeuron(float g, float n) : Neuron(), _g(g), _n(n) {
     }
 };
