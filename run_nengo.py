@@ -1,3 +1,4 @@
+import sys
 import os
 
 import matplotlib.pyplot as plt
@@ -10,7 +11,13 @@ import nengo
 # dtype = theano.config.floatX
 # dtype = 'float32'
 
-from convnet import ConvNet
+# from convnet import ConvNet
+from convdata import DataProvider, CIFARDataProvider
+from python_util.gpumodel import IGPUModel
+DataProvider.register_data_provider('cifar', 'CIFAR-10 data provider', CIFARDataProvider)
+
+presentation_time = 0.15
+get_ind = lambda t: int(t / presentation_time)
 
 
 class SoftLIFRate(nengo.neurons.LIFRate):
@@ -44,23 +51,19 @@ class SoftLIFRate(nengo.neurons.LIFRate):
         # (nan > 0 -> error), and not pass x < -1 to log1p
 
 
-# neurons = SoftLIFRate(sigma=0.002, tau_rc=0.05, tau_ref=0.001)
-# x = np.linspace(-1, 1, 101)
-# # j = 0.8 * x + 1.
-# r = neurons.rates(x, 0.8, 1.)
-# plt.plot(x, r)
-# plt.show()
-# assert False
-
-presentation_time = 0.15
-get_ind = lambda t: int(t / presentation_time)
+def test_softlifrate():
+    neurons = SoftLIFRate(sigma=0.002, tau_rc=0.05, tau_ref=0.001)
+    x = np.linspace(-1, 1, 101)
+    # j = 0.8 * x + 1.
+    r = neurons.rates(x, 0.8, 1.)
+    plt.plot(x, r)
+    plt.show()
 
 
 def build_layer(layer, inputs, data):
     assert isinstance(inputs, list)
     assert len(layer.get('inputs', [])) == len(inputs)
     name = layer['name']
-    print "Building layer %s" % name
 
     if layer['type'] == 'cost.logreg':
         labels, probs = inputs
@@ -250,41 +253,63 @@ def build_target_layer(target_key, layers, data, network, outputs=None):
     return outputs
 
 
-op = ConvNet.get_options_parser()
-op, load_dic = ConvNet.parse_options(op)
-net = ConvNet(op, load_dic)
+def load_network(loadfile):
+    load_dic = IGPUModel.load_checkpoint(loadfile)
+    layers = load_dic['model_state']['layers']
+    op = load_dic['op']
 
-for k, v in net.layers.items():
-    print k, v.get('inputs', None), v.get('outputs', None)
+    options = {}
+    for o in load_dic['op'].get_options_list():
+        options[o.name] = o.value
 
-dp = net.test_data_provider
-epoch, batchnum, [images, labels] = dp.get_next_batch()
-images = images.T
-images.shape = (images.shape[0], 3, 24, 24)
-labels.shape = (-1,)
-labels = labels.astype('int')
+    dp_params = {}
+    for v in ('color_noise', 'multiview_test', 'inner_size', 'scalar_mean', 'minibatch_size'):
+        dp_params[v] = options[v]
+    dp_params['multiview_test'] = 1
 
-if 1:
-    rng = np.random.RandomState(8)
-    i = rng.permutation(images.shape[0])
-    images = images[i]
-    labels = labels[i]
+    # for k, v in layers.items():
+    #     print k, v.get('inputs', None), v.get('outputs', None)
 
-data = {}
-data['data'] = images
-data['labels'] = labels
+    # print dp_params
+    dp = DataProvider.get_instance(
+        options['data_path'],
+        batch_range=options['test_batch_range'],
+        type=options['dp_type'],
+        dp_params=dp_params, test=True)
 
-network = nengo.Network()
-# network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
-# network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.005)
-# network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.003)
-network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
+    epoch, batchnum, [images, labels] = dp.get_next_batch()
+    images = images.T
+    images.shape = (images.shape[0], 3, 24, 24)
+    labels.shape = (-1,)
+    labels = labels.astype('int')
 
-outputs = build_target_layer('logprob', net.layers, data, network)
+    if 1:
+        rng = np.random.RandomState(8)
+        i = rng.permutation(images.shape[0])
+        images = images[i]
+        labels = labels[i]
 
-if 0:
-    # test a particular layer
+    data = {}
+    data['data'] = images
+    data['labels'] = labels
+    data['data_mean'] = dp.data_mean
+    data['label_names'] = dp.batch_meta['label_names']
+
+    return layers, data
+
+
+def run_layer(loadfile):
     from run_numpy import compute_target_layer
+    from nengo.utils.numpy import rms
+
+    layers, data = load_network(loadfile)
+
+    network = nengo.Network()
+    network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
+
+    outputs = build_target_layer('logprob', layers, data, network)
+
+    # test a particular layer
     key = 'conv1'
 
     with network:
@@ -296,7 +321,7 @@ if 0:
     outputs = {}
     outputs['data'] = images[:1]
     outputs['labels'] = labels[:1]
-    compute_target_layer(net.layers, key, outputs)
+    compute_target_layer(layers, key, outputs)
     yref = outputs[key][0]
     y = sim.data[yp][-1].reshape(yref.shape)
 
@@ -309,59 +334,119 @@ if 0:
     plt.colorbar()
     plt.show()
 
-    from nengo.utils.numpy import rms
     print rms(y - yref)
 
     assert np.allclose(yref, y)
 
 
-# test whole network
-with network:
-    synapse = nengo.synapses.Alpha(0.003)
-    xp = nengo.Probe(outputs['data'])
-    yp = nengo.Probe(outputs['fc10'], synapse=synapse)
-    zp = nengo.Probe(outputs['logprob'], synapse=synapse)
+def run(loadfile, savefile=None):
+    layers, data = load_network(loadfile)
 
-sim = nengo.Simulator(network)
-sim.run(100 * presentation_time)
-# sim.run(1.5)
-# sim.run(0.01)
-# sim.run(0.003)
+    network = nengo.Network()
+    # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
+    # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.005)
+    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.003)
+    network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
 
-t = sim.trange()
-y = sim.data[yp]
-z = sim.data[zp]
+    outputs = build_target_layer('logprob', layers, data, network)
 
-# take 10 ms at end of each presentation
-blocks = z.reshape(-1, int(presentation_time / sim.dt))[:, -10:]
-errors = blocks.mean(1) > 0.4
-print "Error: %f" % errors.mean()
+    # test whole network
+    with network:
+        # xp = nengo.Probe(outputs['data'], synapse=None)
+        yp = nengo.Probe(outputs['fc10'], synapse=None)
+        zp = nengo.Probe(outputs['logprob'], synapse=None)
 
-# plot
-plt.figure()
-c, m, n = images.shape[1:]
-inds = slice(0, get_ind(t[-2]) + 1)
-imgs = images[inds]
-lbls = labels[inds]
-allimage = np.zeros((c, m, n * len(imgs)))
-for i, img in enumerate(imgs):
-    img = (img + dp.data_mean.reshape(1, c, m, n)) / 255.
-    allimage[:, :, i * n:(i + 1) * n] = img.clip(0, 1)
+    sim = nengo.Simulator(network)
+    sim.run(10 * presentation_time)
 
-allimage = np.transpose(allimage, (1, 2, 0))
+    dt = sim.dt
+    t = sim.trange()
+    y = sim.data[yp]
+    z = sim.data[zp]
 
-rows, cols = 3, 1
-plt.subplot(rows, cols, 1)
-plt.imshow(allimage, vmin=0, vmax=1)
+    # inds = slice(0, get_ind(t[-2]) + 1)
+    inds = slice(0, get_ind(t[-1]) + 1)
+    images = data['data'][inds]
+    labels = data['labels'][inds]
+    data_mean = data['data_mean']
+    label_names = data['label_names']
 
-plt.subplot(rows, cols, 2)
-plt.plot(t, y)
-plt.xlim([t[0], t[-1]])
-plt.legend(dp.batch_meta['label_names'], fontsize=8, loc=2)
+    if savefile is not None:
+        np.savez(savefile,
+                 images=images, labels=labels,
+                 data_mean=data_mean, label_names=label_names,
+                 dt=dt, t=t, y=y, z=z)
 
-plt.subplot(rows, cols, 3)
-plt.plot(t, z)
-plt.xlim([t[0], t[-1]])
-plt.ylim([-0.1, 1.1])
+    # view(dt, images, labels, data_mean, label_names, t, y, z)
+    errors, y, z = error(dt, labels, t, y, z)
+    print "Error: %f" % errors.mean()
 
-plt.show()
+
+def error(dt, labels, t, y, z):
+    s = nengo.synapses.Alpha(0.01)
+    y = nengo.synapses.filtfilt(y, s, dt)
+
+    if 0:
+        z = nengo.synapses.filtfilt(z, s, dt)
+    else:
+        lt = labels[(t / presentation_time).astype(int)]
+        z = (np.argmax(y, axis=1) != lt)
+
+    # take 10 ms at end of each presentation
+    blocks = z.reshape(-1, int(presentation_time / dt))[:, -10:]
+    errors = blocks.mean(1) > 0.4
+    return errors, y, z
+
+
+def view(dt, images, labels, data_mean, label_names, t, y, z):
+
+    # # filter y and z
+    # s = nengo.synapses.Alpha(0.01)
+    # y = nengo.synapses.filtfilt(y, s, dt)
+
+    # if 0:
+    #     z = nengo.synapses.filtfilt(z, s, dt)
+    # else:
+    #     print labels.shape
+    #     lt = labels[(t / presentation_time).astype(int)]
+    #     z = (np.argmax(y, axis=1) != lt)
+
+    # # take 10 ms at end of each presentation
+    # blocks = z.reshape(-1, int(presentation_time / dt))[:, -10:]
+    # errors = blocks.mean(1) > 0.4
+    # print "Error: %f" % errors.mean()
+
+    # plot
+    plt.figure()
+    c, m, n = images.shape[1:]
+    inds = slice(0, get_ind(t[-2]) + 1)
+    imgs = images[inds]
+    allimage = np.zeros((c, m, n * len(imgs)))
+    for i, img in enumerate(imgs):
+        img = (img + data_mean.reshape(1, c, m, n)) / 255.
+        allimage[:, :, i * n:(i + 1) * n] = img.clip(0, 1)
+
+    allimage = np.transpose(allimage, (1, 2, 0))
+
+    rows, cols = 3, 1
+    plt.subplot(rows, cols, 1)
+    plt.imshow(allimage, vmin=0, vmax=1)
+
+    plt.subplot(rows, cols, 2)
+    plt.plot(t, y)
+    plt.xlim([t[0], t[-1]])
+    plt.legend(label_names, fontsize=8, loc=2)
+
+    plt.subplot(rows, cols, 3)
+    plt.plot(t, z)
+    plt.xlim([t[0], t[-1]])
+    plt.ylim([-0.1, 1.1])
+
+    plt.show()
+
+
+if __name__ == '__main__':
+    assert len(sys.argv) == 3
+    loadfile = sys.argv[1]
+    savefile = sys.argv[2]
+    run(loadfile, savefile)
