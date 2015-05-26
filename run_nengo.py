@@ -253,7 +253,7 @@ def build_target_layer(target_key, layers, data, network, outputs=None):
     return outputs
 
 
-def load_network(loadfile):
+def load_network(loadfile, multiview=None):
     load_dic = IGPUModel.load_checkpoint(loadfile)
     layers = load_dic['model_state']['layers']
     op = load_dic['op']
@@ -265,7 +265,9 @@ def load_network(loadfile):
     dp_params = {}
     for v in ('color_noise', 'multiview_test', 'inner_size', 'scalar_mean', 'minibatch_size'):
         dp_params[v] = options[v]
-    dp_params['multiview_test'] = 1
+
+    if multiview is not None:
+        dp_params['multiview_test'] = multiview
 
     # for k, v in layers.items():
     #     print k, v.get('inputs', None), v.get('outputs', None)
@@ -339,8 +341,8 @@ def run_layer(loadfile):
     assert np.allclose(yref, y)
 
 
-def run(loadfile, savefile=None):
-    layers, data = load_network(loadfile)
+def run(loadfile, savefile=None, multiview=None):
+    layers, data = load_network(loadfile, multiview)
 
     network = nengo.Network()
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
@@ -357,7 +359,7 @@ def run(loadfile, savefile=None):
         zp = nengo.Probe(outputs['logprob'], synapse=None)
 
     sim = nengo.Simulator(network)
-    sim.run(10 * presentation_time)
+    sim.run(1000 * presentation_time)
 
     dt = sim.dt
     t = sim.trange()
@@ -376,10 +378,11 @@ def run(loadfile, savefile=None):
                  images=images, labels=labels,
                  data_mean=data_mean, label_names=label_names,
                  dt=dt, t=t, y=y, z=z)
+        print("Saved '%s'" % savefile)
 
     # view(dt, images, labels, data_mean, label_names, t, y, z)
     errors, y, z = error(dt, labels, t, y, z)
-    print "Error: %f" % errors.mean()
+    print("Error: %f" % errors.mean())
 
 
 def error(dt, labels, t, y, z):
@@ -399,22 +402,6 @@ def error(dt, labels, t, y, z):
 
 
 def view(dt, images, labels, data_mean, label_names, t, y, z):
-
-    # # filter y and z
-    # s = nengo.synapses.Alpha(0.01)
-    # y = nengo.synapses.filtfilt(y, s, dt)
-
-    # if 0:
-    #     z = nengo.synapses.filtfilt(z, s, dt)
-    # else:
-    #     print labels.shape
-    #     lt = labels[(t / presentation_time).astype(int)]
-    #     z = (np.argmax(y, axis=1) != lt)
-
-    # # take 10 ms at end of each presentation
-    # blocks = z.reshape(-1, int(presentation_time / dt))[:, -10:]
-    # errors = blocks.mean(1) > 0.4
-    # print "Error: %f" % errors.mean()
 
     # plot
     plt.figure()
@@ -446,7 +433,12 @@ def view(dt, images, labels, data_mean, label_names, t, y, z):
 
 
 if __name__ == '__main__':
-    assert len(sys.argv) == 3
-    loadfile = sys.argv[1]
-    savefile = sys.argv[2]
-    run(loadfile, savefile)
+    import argparse
+    parser = argparse.ArgumentParser(description="Run network in Nengo")
+    parser.add_argument('--multiview', action='store_const', const=1, default=None)
+    parser.add_argument('loadfile', help="Checkpoint to load")
+    parser.add_argument('savefile', nargs='?', default=None, help="Where to save output")
+
+    args = parser.parse_args()
+    savefile = args.loadfile.rstrip('/') + '.npz' if args.savefile is None else args.savefile
+    run(args.loadfile, savefile, args.multiview)

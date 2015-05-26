@@ -4,13 +4,14 @@ DATA=(--data-path ~/data/cifar-10-py-colmajor/
       --inner-size 24)
 # DATA+=(--color-noise 0.1)
 
-LAYERS=(--layer-def ./layers/layers-cifar10-11pct.cfg)
+# LAYERS=(--layer-def ./layers/layers-cifar10-11pct.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-max.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-avg.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-dropout.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-logavg.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-lifavg.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-hinge.cfg)
+LAYERS=(--layer-def ./layers/layers-cifar10-lifnoise.cfg)
 
 LAYERS+=(--layer-params ./layers/layer-params-cifar10-11pct.cfg)
 
@@ -40,6 +41,8 @@ else
 fi
 
 # train on sets 1-4
+# ipython --pdb convnet.py -- "${DATA[@]}" "${LAYERS[@]}" "${OPTS[@]}" \
+#     --train-range 1-4 --test-range 6 --epochs ${EPOCHS[0]}
 python convnet.py "${DATA[@]}" "${LAYERS[@]}" "${OPTS[@]}" \
     --train-range 1-4 --test-range 6 --epochs ${EPOCHS[0]}
 
