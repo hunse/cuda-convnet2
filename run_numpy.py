@@ -40,11 +40,16 @@ def compute_layer(layer, inputs):
         if ntype == 'relu':
             return np.maximum(0, x)
         if ntype == 'softlif':
-            tau_ref = 0.001
-            tau_rc = 0.05
-            alpha = 0.825
-            amp = 0.063
-            sigma = neuron['params']['a']
+            params = neuron['params']
+            # tau_ref = 0.001
+            # tau_rc = 0.05
+            # alpha = 0.825
+            # amp = 0.063
+            tau_ref = params['t']
+            tau_rc = params['r']
+            alpha = params['a']
+            amp = params['m']
+            sigma = params['g']
             y = (alpha / sigma) * x
             j = sigma * np.where(y > 4.0, y, np.log1p(np.exp(y)))
             v = amp / (tau_ref + tau_rc * np.log1p(1. / j))

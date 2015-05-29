@@ -1581,7 +1581,7 @@ neuron_parsers = sorted([NeuronParser('ident', 'f(x) = x', uses_acts=False, uses
                          ParamNeuronParser('brelu[a]', 'f(x) = min(a, max(0, x))', uses_acts=True, uses_inputs=False),
                          ParamNeuronParser('linear[a,b]', 'f(x) = a * x + b', uses_acts=True, uses_inputs=False),
                          ParamNeuronParser('drelu[a]', 'f(x) = x - a * tanh(x / a)', uses_acts=False, uses_inputs=True),
-                         ParamNeuronParser('softlif[g,n]', 'f(x) = softlif(x, g) + n', uses_acts=False, uses_inputs=True)],
+                         ParamNeuronParser('softlif[m,t,r,a,g,n]', 'f(x) = m / (t + r * log1p(1/j)) + N(0, m*n), where j = g*softrelu(a*x/g)', uses_acts=False, uses_inputs=True)],
                         key=lambda x:x.type)
 
 # Learning rate schedules

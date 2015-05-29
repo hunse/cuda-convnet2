@@ -15,7 +15,7 @@
  */
 
 #include <vector>
-#include <iostream> 
+#include <iostream>
 #include <string>
 #include <set>
 #include <map>
@@ -28,7 +28,7 @@
 
 using namespace std;
 
-/* 
+/*
  * =======================
  * ConvNet
  * =======================
@@ -47,7 +47,7 @@ ConvNet::ConvNet(PyObject* layerParams, intv& deviceIDs,
     PyObjectV* layerList = pyDictGetValues(layerParams);
     std::sort(layerList->begin(), layerList->end(), LayerIDComparator());
 
-    
+
     _dataCopyPD = new PipeDispenserBlocking(DIVUP(_deviceIDs.size(),2)); // hard-coded for now
 
     initDataLayers(layerList);
@@ -566,7 +566,7 @@ bool ConvNet::checkGradient(const std::string& name, float eps, Weights& weights
     return fail;
 }
 
-/* 
+/*
  * =======================================================================================================
  * ConvNetThread
  * =======================================================================================================
@@ -677,9 +677,9 @@ void ConvNetThread::initLayer(PyObject* paramsDict, int replicaID) {
 }
 
 /*
- * This executes in a new CPU thread so it's OK to initialize CUDA stuff here. 
+ * This executes in a new CPU thread so it's OK to initialize CUDA stuff here.
  */
-void ConvNetThread::initCuda() { 
+void ConvNetThread::initCuda() {
     NVMatrix::setDeviceID(_deviceID);
     checkCudaErrors(cudaDeviceSetCacheConfig(cudaFuncCachePreferShared));
     for (int i = 0; i < _convNet->getDeviceIDs().size(); i++) {

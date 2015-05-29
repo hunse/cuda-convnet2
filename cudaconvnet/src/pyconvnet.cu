@@ -39,6 +39,7 @@ using namespace std;
 static ConvNet* model = NULL;
 
 static PyMethodDef _ConvNetMethods[] = {{ "initModel",          initModel,              METH_VARARGS },
+                                        { "destroyModel",       destroyModel,           METH_VARARGS },
                                         { "startBatch",         startBatch,             METH_VARARGS },
                                         { "finishBatch",        finishBatch,            METH_VARARGS },
                                         { "checkGradients",     checkGradients,         METH_VARARGS },
@@ -92,6 +93,14 @@ PyObject* initModel(PyObject *self, PyObject *args) {
     return Py_BuildValue("i", 0);
 }
 
+PyObject* destroyModel(PyObject *self, PyObject *args) {
+    assert(model != NULL);
+    delete model;
+    model = NULL;
+
+    return Py_BuildValue("i", 0);
+}
+
 /*
  * Starts training/testing on the given batch (asynchronous -- returns immediately).
  */
@@ -108,7 +117,7 @@ PyObject* startBatch(PyObject *self, PyObject *args) {
         return NULL;
     }
     CPUData* cpuData = new CPUData((PyObject*)data);
-    
+
     TrainingWorker* wr = new TrainingWorker(*model, *cpuData, progress, test);
     model->getWorkerQueue().enqueue(wr);
     return Py_BuildValue("i", 0);
@@ -151,7 +160,7 @@ PyObject* startFeatureWriter(PyObject *self, PyObject *args) {
     stringv* layerNames = getStringV((PyObject*)pyLayerNames);
     CPUData* cpuData = new CPUData((PyObject*)data);
     MatrixV* ftrs = getMatrixV((PyObject*)pyFtrs);
-    
+
     FeatureWorker* wr = new FeatureWorker(*model, *cpuData, *ftrs, *layerNames);
     model->getWorkerQueue().enqueue(wr);
     return Py_BuildValue("i", 0);
@@ -169,7 +178,7 @@ PyObject* startDataGrad(PyObject *self, PyObject *args) {
 //    CPUData* cpuData = new CPUData((PyObject*)data);
 //    Matrix& ftrs = *mvec.back();
 //    mvec.pop_back();
-//    
+//
 //    DataGradWorker* wr = new DataGradWorker(*model, *cpuData, ftrs, dataLayerIdx, softmaxLayerIdx);
 //    model->getWorkerQueue().enqueue(wr);
     return Py_BuildValue("i", 0);
@@ -184,7 +193,7 @@ PyObject* finishBatch(PyObject *self, PyObject *args) {
     WorkResult* res = model->getResultQueue().dequeue();
     assert(res != NULL);
     assert(res->getResultType() == WorkResult::BATCH_DONE);
-    
+
     Cost& cost = res->getResults();
     PyObject* dict = PyDict_New();
     CostMap& costMap = cost.getCostMap();
@@ -198,7 +207,7 @@ PyObject* finishBatch(PyObject *self, PyObject *args) {
     }
     PyObject* retVal = Py_BuildValue("Ni", dict, cost.getNumCases());
     delete res; // Deletes cost too
-    
+
     return retVal;
 }
 
@@ -210,7 +219,7 @@ PyObject* checkGradients(PyObject *self, PyObject *args) {
         return NULL;
     }
     CPUData* cpuData = new CPUData((PyObject*)data);
-    
+
     GradCheckWorker* wr = new GradCheckWorker(*model, *cpuData);
     model->getWorkerQueue().enqueue(wr);
     WorkResult* res = model->getResultQueue().dequeue();
@@ -230,7 +239,7 @@ PyObject* syncWithHost(PyObject *self, PyObject *args) {
     WorkResult* res = model->getResultQueue().dequeue();
     assert(res != NULL);
     assert(res->getResultType() == WorkResult::SYNC_DONE);
-    
+
     delete res;
     return Py_BuildValue("i", 0);
 }

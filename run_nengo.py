@@ -14,10 +14,17 @@ import nengo
 # from convnet import ConvNet
 from convdata import DataProvider, CIFARDataProvider
 from python_util.gpumodel import IGPUModel
-DataProvider.register_data_provider('cifar', 'CIFAR-10 data provider', CIFARDataProvider)
 
 presentation_time = 0.15
 get_ind = lambda t: int(t / presentation_time)
+
+
+def softrelu(x, sigma=1.):
+    y = x / sigma
+    z = np.array(x)
+    z[y < 34.0] = sigma * np.log1p(np.exp(y[y < 34.0]))
+    # ^ 34.0 gives exact answer in 32 or 64 bit but doesn't overflow in 32 bit
+    return z
 
 
 class SoftLIFRate(nengo.neurons.LIFRate):
@@ -42,20 +49,19 @@ class SoftLIFRate(nengo.neurons.LIFRate):
 
     def step_math(self, dt, J, output):
         """Compute rates in Hz for input current (incl. bias)"""
-        x = (J - 1) / self.sigma
-        j = self.sigma * np.where(x > 4.0, x, np.log1p(np.exp(x)))
+        # x = (J - 1) / self.sigma
+        # j = self.sigma * np.where(x > 4.0, x, np.log1p(np.exp(x)))
+        j = softrelu(J - 1, sigma=self.sigma)
         output[:] = 0  # faster than output[j <= 0] = 0
         output[j > 0] = 1. / (
             self.tau_ref + self.tau_rc * np.log1p(1. / j[j > 0]))
-        # the above line is designed to throw an error if any j is nan
-        # (nan > 0 -> error), and not pass x < -1 to log1p
 
 
 def test_softlifrate():
-    neurons = SoftLIFRate(sigma=0.002, tau_rc=0.05, tau_ref=0.001)
+    neurons = SoftLIFRate(sigma=0.002, tau_rc=0.02, tau_ref=0.002)
     x = np.linspace(-1, 1, 101)
     # j = 0.8 * x + 1.
-    r = neurons.rates(x, 0.8, 1.)
+    r = neurons.rates(x, 1., 1.)
     plt.plot(x, r)
     plt.show()
 
@@ -108,13 +114,18 @@ def build_layer(layer, inputs, data):
             e.bias = 0 * np.ones(n)
             return e.neurons
         if ntype == 'softlif':
-            # e.neuron_type = SoftLIFRate(sigma=0.2, tau_rc=0.05, tau_ref=0.001)
-            # e.neuron_type = nengo.LIFRate(tau_rc=0.05, tau_ref=0.001)
-            e.neuron_type = nengo.LIF(tau_rc=0.05, tau_ref=0.001)
-            e.gain = 0.825 * np.ones(n)
+            params = neuron['params']
+            # import pdb; pdb.set_trace()
+            print neuron
+            # tau_rc, tau_ref = neuron.params['r'], neuron.params
+
+            e.neuron_type = SoftLIFRate(sigma=params['g'], tau_rc=params['r'], tau_ref=params['t'])
+            # e.neuron_type = nengo.LIFRate(tau_rc=params['r'], tau_ref=params['t'])
+            # e.neuron_type = nengo.LIF(tau_rc=params['r'], tau_ref=params['t'])
+            e.gain = params['a'] * np.ones(n)
             e.bias = 1. * np.ones(n)
             u = nengo.Node(size_in=n)
-            nengo.Connection(e.neurons, u, transform=0.063, synapse=None)
+            nengo.Connection(e.neurons, u, transform=params['m'], synapse=None)
             return u
         raise NotImplementedError(ntype)
     if layer['type'] == 'softmax':
@@ -345,10 +356,10 @@ def run(loadfile, savefile=None, multiview=None):
     layers, data = load_network(loadfile, multiview)
 
     network = nengo.Network()
-    # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
+    network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.005)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.003)
-    network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
+    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
 
     outputs = build_target_layer('logprob', layers, data, network)
 
@@ -359,7 +370,10 @@ def run(loadfile, savefile=None, multiview=None):
         zp = nengo.Probe(outputs['logprob'], synapse=None)
 
     sim = nengo.Simulator(network)
-    sim.run(1000 * presentation_time)
+    # sim.run(3 * presentation_time)
+    sim.run(20 * presentation_time)
+    # sim.run(100 * presentation_time)
+    # sim.run(1000 * presentation_time)
 
     dt = sim.dt
     t = sim.trange()
@@ -433,6 +447,9 @@ def view(dt, images, labels, data_mean, label_names, t, y, z):
 
 
 if __name__ == '__main__':
+    # test_softlifrate()
+    # assert False
+
     import argparse
     parser = argparse.ArgumentParser(description="Run network in Nengo")
     parser.add_argument('--multiview', action='store_const', const=1, default=None)

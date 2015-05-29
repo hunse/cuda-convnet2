@@ -179,9 +179,11 @@ IBroadcastNetwork::~IBroadcastNetwork() {
     v.insert(v.end(), _peers.begin(), _peers.end());
     v.insert(v.end(), _src);
     for (vector<ICopySegment*>::const_iterator it = v.begin(); it != v.end(); ++it) {
-        (*it)->getQueue().enqueue(new CopyMessage(CopyMessage::EXIT));
-        (*it)->join();
-        delete *it;
+        if ((*it) != NULL) {
+            (*it)->getQueue().enqueue(new CopyMessage(CopyMessage::EXIT));
+            (*it)->join();
+            delete *it;
+        }
     }
 }
 
@@ -375,4 +377,3 @@ void TwoPeeringGPUsBroadcaster::_broadcast(std::map<int, NVMatrix*>& mats, float
     NVMatrix::syncStream(_tgtStream);
     resetDeviceID(d);
 }
-

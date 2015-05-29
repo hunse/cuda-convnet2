@@ -23,6 +23,7 @@
 extern "C" void init_ConvNet();
 
 PyObject* initModel(PyObject *self, PyObject *args);
+PyObject* destroyModel(PyObject *self, PyObject *args);
 PyObject* startBatch(PyObject *self, PyObject *args);
 PyObject* finishBatch(PyObject *self, PyObject *args);
 PyObject* checkGradients(PyObject *self, PyObject *args);

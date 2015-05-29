@@ -97,25 +97,35 @@ class FeatureWriterDriver(Driver):
                                                                              'num_vis':self.num_ftrs,
                                                                              'batch_size': self.convnet.test_data_provider.batch_meta['batch_size']})
 
+lib_name = "cudaconvnet._ConvNet"
+print "========================="
+print "Importing %s C++ module" % lib_name
+libmodel = __import__(lib_name,fromlist=['_ConvNet'])
+
 class ConvNet(IGPUModel):
     def __init__(self, op, load_dic, dp_params={}):
         filename_options = []
         for v in ('color_noise', 'multiview_test', 'inner_size', 'scalar_mean', 'minibatch_size'):
             dp_params[v] = op.get_value(v)
 
+        self.libmodel = libmodel
         IGPUModel.__init__(self, "ConvNet", op, load_dic, filename_options, dp_params=dp_params)
 
     def import_model(self):
-        lib_name = "cudaconvnet._ConvNet"
-        print "========================="
-        print "Importing %s C++ module" % lib_name
-        self.libmodel = __import__(lib_name,fromlist=['_ConvNet'])
+        pass
+        # lib_name = "cudaconvnet._ConvNet"
+        # print "========================="
+        # print "Importing %s C++ module" % lib_name
+        # self.libmodel = __import__(lib_name,fromlist=['_ConvNet'])
 
     def init_model_lib(self):
         self.libmodel.initModel(self.layers,
                                 self.device_ids,
                                 self.minibatch_size,
                                 self.conserve_mem)
+    def destroy_model_lib(self):
+        self.libmodel.destroyModel()
+        # del self.libmodel
 
     def init_model_state(self):
         ms = self.model_state
@@ -208,7 +218,8 @@ class ConvNet(IGPUModel):
                     print eval(self.layers[errname]['outputFilterFormatter'])(self,filtered_costs),
                 if m.isnan(filtered_costs[0]) or m.isinf(filtered_costs[0]):
                     print "<- error nan or inf!"
-                    sys.exit(1)
+                    raise RuntimeError("Error nan or inf")
+                    # sys.exit(1)
         for c in children:
             del costs[c]
 
@@ -272,10 +283,6 @@ class ConvNet(IGPUModel):
         op.options["testing_freq"].default = 57
         op.options["num_epochs"].default = 50000
         op.options['dp_type'].default = None
-
-        DataProvider.register_data_provider('dummy-lr-n', 'Dummy ConvNet logistic regression', DummyConvNetLogRegDataProvider)
-        DataProvider.register_data_provider('image', 'JPEG-encoded image data provider', ImageDataProvider)
-        DataProvider.register_data_provider('cifar', 'CIFAR-10 data provider', CIFARDataProvider)
 
         return op
 

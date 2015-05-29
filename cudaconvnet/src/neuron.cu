@@ -73,6 +73,10 @@ Neuron& Neuron::makeNeuron(PyObject* neuronDict) {
 
     if (type == "softlif") {
         return *new SoftLifNeuron(
+            pyDictGetFloat(neuronParamsDict, "m"),
+            pyDictGetFloat(neuronParamsDict, "t"),
+            pyDictGetFloat(neuronParamsDict, "r"),
+            pyDictGetFloat(neuronParamsDict, "a"),
             pyDictGetFloat(neuronParamsDict, "g"),
             pyDictGetFloat(neuronParamsDict, "n"));
     }
