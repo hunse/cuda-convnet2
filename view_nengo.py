@@ -18,7 +18,7 @@ for n in ['dt', 'images', 'labels', 'data_mean', 'label_names', 't', 'y', 'z']:
     kwargs[n] = objs[n]
 
 errors, y, z = error(*[kwargs[n] for n in ('dt', 'labels', 't', 'y', 'z')])
-print "Error: %f" % errors.mean()
+print "Error: %f (%d samples)" % (errors.mean(), errors.size)
 kwargs['y'] = y
 kwargs['z'] = z
 

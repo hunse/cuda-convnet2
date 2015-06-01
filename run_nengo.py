@@ -5,15 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import nengo
 
-# os.environ['THEANO_FLAGS'] = 'floatX=float32'
-# import theano
-# import theano.tensor as tt
-# dtype = theano.config.floatX
-# dtype = 'float32'
-
-# from convnet import ConvNet
-from convdata import DataProvider, CIFARDataProvider
-from python_util.gpumodel import IGPUModel
+from run_core import load_network
 
 presentation_time = 0.15
 get_ind = lambda t: int(t / presentation_time)
@@ -115,17 +107,28 @@ def build_layer(layer, inputs, data):
             return e.neurons
         if ntype == 'softlif':
             params = neuron['params']
-            # import pdb; pdb.set_trace()
-            print neuron
-            # tau_rc, tau_ref = neuron.params['r'], neuron.params
-
-            e.neuron_type = SoftLIFRate(sigma=params['g'], tau_rc=params['r'], tau_ref=params['t'])
+            if 't' not in params:
+                tau_ref = 0.001
+                tau_rc = 0.05
+                alpha = 0.825
+                amp = 0.063
+                sigma = params.get('g', params.get('a', None))
+                noise = 0.0
+            else:
+                tau_ref = params['t']
+                tau_rc = params['r']
+                alpha = params['a']
+                amp = params['m']
+                sigma = params['g']
+                noise = params['n']
+            # print neuron
+            # e.neuron_type = SoftLIFRate(sigma=params['g'], tau_rc=params['r'], tau_ref=params['t'])
             # e.neuron_type = nengo.LIFRate(tau_rc=params['r'], tau_ref=params['t'])
-            # e.neuron_type = nengo.LIF(tau_rc=params['r'], tau_ref=params['t'])
-            e.gain = params['a'] * np.ones(n)
+            e.neuron_type = nengo.LIF(tau_rc=tau_rc, tau_ref=tau_ref)
+            e.gain = alpha * np.ones(n)
             e.bias = 1. * np.ones(n)
             u = nengo.Node(size_in=n)
-            nengo.Connection(e.neurons, u, transform=params['m'], synapse=None)
+            nengo.Connection(e.neurons, u, transform=amp, synapse=None)
             return u
         raise NotImplementedError(ntype)
     if layer['type'] == 'softmax':
@@ -264,53 +267,6 @@ def build_target_layer(target_key, layers, data, network, outputs=None):
     return outputs
 
 
-def load_network(loadfile, multiview=None):
-    load_dic = IGPUModel.load_checkpoint(loadfile)
-    layers = load_dic['model_state']['layers']
-    op = load_dic['op']
-
-    options = {}
-    for o in load_dic['op'].get_options_list():
-        options[o.name] = o.value
-
-    dp_params = {}
-    for v in ('color_noise', 'multiview_test', 'inner_size', 'scalar_mean', 'minibatch_size'):
-        dp_params[v] = options[v]
-
-    if multiview is not None:
-        dp_params['multiview_test'] = multiview
-
-    # for k, v in layers.items():
-    #     print k, v.get('inputs', None), v.get('outputs', None)
-
-    # print dp_params
-    dp = DataProvider.get_instance(
-        options['data_path'],
-        batch_range=options['test_batch_range'],
-        type=options['dp_type'],
-        dp_params=dp_params, test=True)
-
-    epoch, batchnum, [images, labels] = dp.get_next_batch()
-    images = images.T
-    images.shape = (images.shape[0], 3, 24, 24)
-    labels.shape = (-1,)
-    labels = labels.astype('int')
-
-    if 1:
-        rng = np.random.RandomState(8)
-        i = rng.permutation(images.shape[0])
-        images = images[i]
-        labels = labels[i]
-
-    data = {}
-    data['data'] = images
-    data['labels'] = labels
-    data['data_mean'] = dp.data_mean
-    data['label_names'] = dp.batch_meta['label_names']
-
-    return layers, data
-
-
 def run_layer(loadfile):
     from run_numpy import compute_target_layer
     from nengo.utils.numpy import rms
@@ -356,10 +312,10 @@ def run(loadfile, savefile=None, multiview=None):
     layers, data = load_network(loadfile, multiview)
 
     network = nengo.Network()
-    network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
+    # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.005)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.003)
-    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
+    network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
 
     outputs = build_target_layer('logprob', layers, data, network)
 
@@ -371,9 +327,9 @@ def run(loadfile, savefile=None, multiview=None):
 
     sim = nengo.Simulator(network)
     # sim.run(3 * presentation_time)
-    sim.run(20 * presentation_time)
+    # sim.run(20 * presentation_time)
     # sim.run(100 * presentation_time)
-    # sim.run(1000 * presentation_time)
+    sim.run(1000 * presentation_time)
 
     dt = sim.dt
     t = sim.trange()

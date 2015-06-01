@@ -11,9 +11,11 @@ DATA=(--data-path ~/data/cifar-10-py-colmajor/
 # LAYERS=(--layer-def ./layers/layers-cifar10-logavg.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-lifavg.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-hinge.cfg)
-LAYERS=(--layer-def ./layers/layers-cifar10-lifnoise.cfg)
+# LAYERS=(--layer-def ./layers/layers-cifar10-lifnoise.cfg)
+LAYERS=(--layer-def ./layers/layers-cifar10-lifnoise2.cfg)
 
-LAYERS+=(--layer-params ./layers/layer-params-cifar10-11pct.cfg)
+# LAYERS+=(--layer-params ./layers/layer-params-cifar10-11pct.cfg)
+LAYERS+=(--layer-params ./layers/layer-params-cifar10-lifnoise2.cfg)
 
 OPTS=(--save-path ./checkpoints
       --gpu 0

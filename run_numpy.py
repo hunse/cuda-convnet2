@@ -7,7 +7,10 @@ import theano
 import theano.tensor as tt
 # dtype = theano.config.floatX
 
-from convnet import ConvNet
+# from convnet import ConvNet
+from run_core import load_network
+
+rng = np.random.RandomState(9)
 
 
 def compute_layer(layer, inputs):
@@ -41,19 +44,32 @@ def compute_layer(layer, inputs):
             return np.maximum(0, x)
         if ntype == 'softlif':
             params = neuron['params']
-            # tau_ref = 0.001
-            # tau_rc = 0.05
-            # alpha = 0.825
-            # amp = 0.063
-            tau_ref = params['t']
-            tau_rc = params['r']
-            alpha = params['a']
-            amp = params['m']
-            sigma = params['g']
+            if 't' not in params:
+                tau_ref = 0.001
+                tau_rc = 0.05
+                alpha = 0.825
+                amp = 0.063
+                sigma = params.get('g', params.get('a', None))
+                noise = 0.0
+            else:
+                tau_ref = params['t']
+                tau_rc = params['r']
+                alpha = params['a']
+                amp = params['m']
+                sigma = params['g']
+                noise = params['n']
+            tau_ref = np.array(tau_ref, dtype='float32')
+            tau_rc = np.array(tau_rc, dtype='float32')
+            amp = np.array(amp, dtype='float32')
+            alpha = np.array(alpha, dtype='float32')
+            sigma = np.array(sigma, dtype='float32')
+            x = x.astype('float32')
             y = (alpha / sigma) * x
             j = sigma * np.where(y > 4.0, y, np.log1p(np.exp(y)))
-            v = amp / (tau_ref + tau_rc * np.log1p(1. / j))
-            return np.where(j > 0, v, 0.0)
+            r = amp / (tau_ref + tau_rc * np.log1p(1. / j))
+            # print "noising"
+            # r[y > 0] += rng.normal(scale=amp * noise, size=(y > 0).sum())
+            return np.where(j > 0, r, 0.0)
         raise NotImplementedError(ntype)
     if layer['type'] == 'softmax':
         assert x.ndim == 2
@@ -90,6 +106,10 @@ def compute_layer(layer, inputs):
 
         f = theano.function([sx], sy)
         y = f(x)
+        # y += biases
+
+        print abs(filters).mean(), abs(filters).std(), abs(filters).max()
+        print abs(biases).mean(), abs(biases).std(), abs(biases).max()
 
         assert np.prod(y.shape[1:]) == layer['outputs']
         return y
@@ -181,46 +201,49 @@ def compute_layers(layers, output_dict):
 
 
 if __name__ == '__main__':
-    op = ConvNet.get_options_parser()
-    op, load_dic = ConvNet.parse_options(op)
-    net = ConvNet(op, load_dic)
+    import argparse
+    parser = argparse.ArgumentParser(description="Run network in Nengo")
+    parser.add_argument('loadfile', help="Checkpoint to load")
 
-    for k, v in net.layers.items():
-        print k, v.get('inputs', None), v.get('outputs', None)
+    args = parser.parse_args()
+    layers, data = load_network(args.loadfile)
 
-
-
-    dp = net.test_data_provider
-    epoch, batchnum, [data, labels] = dp.get_next_batch()
-    data = data.T
-    data.shape = (data.shape[0], 3, 24, 24)
-    labels.shape = (-1,)
-    labels = labels.astype('int')
-
-    # np.random.shuffle(labels)
-
-    # data = data[:1000]
-    # labels = labels[:1000]
+    inds = slice(None)
+    # inds = slice(0, 20)
+    # inds = slice(0, 100)
+    images = data['data'][inds]
+    labels = data['labels'][inds]
 
     if 0:
         n = 10
-        pdata = data[:n]
-        pdata = (pdata + dp.data_mean.reshape(1, 3, 24, 24)) / 255.
-        pdata = np.transpose(pdata, (0, 2, 3, 1))
-        pdata = pdata.clip(0, 1)
+        pimages = images[:n]
+        pimages = (pimages + data['data_mean'].reshape(1, 3, 24, 24)) / 255.
+        pimages = np.transpose(pimages, (0, 2, 3, 1))
+        pimages = pimages.clip(0, 1)
 
         import matplotlib.pyplot as plt
         plt.figure(figsize=(12, 6))
         for i in range(10):
             plt.subplot(2, 5, i+1)
-            plt.imshow(pdata[i], vmin=0, vmax=1)
-            # plt.imshow(pdata[i], vmin=0, vmax=1)
+            plt.imshow(pimages[i], vmin=0, vmax=1)
+            # plt.imshow(pimages[i], vmin=0, vmax=1)
 
         plt.show()
 
     output_dict = {}
-    output_dict['data'] = data
+    output_dict['data'] = images
     output_dict['labels'] = labels
-    compute_layers(net.layers, output_dict)
+    compute_layers(layers, output_dict)
+
+    def print_acts(name):
+        layer = layers[name]
+        if 'inputs' in layer:
+            for parent in layer['inputs']:
+                print_acts(parent)
+
+        output = output_dict[name]
+        print "%15s: %10f %10f [%10f %10f]" % (name, output.mean(), output.std(), output.min(), output.max())
+
+    print_acts('probs')
 
     print output_dict['logprob']
