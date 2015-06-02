@@ -1,11 +1,11 @@
 # Copyright 2014 Google Inc. All rights reserved.
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #    http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,6 +17,7 @@
 # This script makes batches suitable for training from raw ILSVRC 2012 tar files.
 
 import tarfile
+import gzip
 from StringIO import StringIO
 from random import shuffle
 import sys
@@ -95,18 +96,18 @@ def write_batches(target_dir, name, start_batch_num, labels, jpeg_files):
         batch_path = os.path.join(target_dir, 'data_batch_%d' % (start_batch_num + i))
         makedir(batch_path)
         for j in xrange(0, len(labels_batch), OUTPUT_SUB_BATCH_SIZE):
-            pickle(os.path.join(batch_path, 'data_batch_%d.%d' % (start_batch_num + i, j/OUTPUT_SUB_BATCH_SIZE)), 
+            pickle(os.path.join(batch_path, 'data_batch_%d.%d' % (start_batch_num + i, j/OUTPUT_SUB_BATCH_SIZE)),
                    {'data': jpeg_strings[j:j+OUTPUT_SUB_BATCH_SIZE],
                     'labels': labels_batch[j:j+OUTPUT_SUB_BATCH_SIZE]})
         print "Wrote %s (%s batch %d of %d) (%.2f sec)" % (batch_path, name, i+1, len(jpeg_files), time() - t)
     return i + 1
 
-if __name__ == "__main__":
+def make_ilsvrc():
     parser = argp.ArgumentParser()
     parser.add_argument('--src-dir', help='Directory containing ILSVRC2012_img_train.tar, ILSVRC2012_img_val.tar, and ILSVRC2012_devkit_t12.tar.gz', required=True)
     parser.add_argument('--tgt-dir', help='Directory to output ILSVRC 2012 batches suitable for cuda-convnet to train on.', required=True)
     args = parser.parse_args()
-    
+
     print "CROP_TO_SQUARE: %s" % CROP_TO_SQUARE
     print "OUTPUT_IMAGE_SIZE: %s" % OUTPUT_IMAGE_SIZE
     print "NUM_WORKER_THREADS: %s" % NUM_WORKER_THREADS
@@ -124,7 +125,7 @@ if __name__ == "__main__":
         print "Loaded synset tars."
         print "Building training set image list (this can take 10-20 minutes)..."
         sys.stdout.flush()
-    
+
         train_jpeg_files = []
         for i,st in enumerate(synset_tars):
             if i % 100 == 0:
@@ -132,20 +133,20 @@ if __name__ == "__main__":
                 sys.stdout.flush()
             train_jpeg_files += [st.extractfile(m) for m in st.getmembers()]
             st.close()
-            
+
         shuffle(train_jpeg_files)
         train_labels = [[labels_dic[jpeg.name[:9]]] for jpeg in train_jpeg_files]
         print "done"
-    
+
         # Write training batches
         i = write_batches(args.tgt_dir, 'training', 0, train_labels, train_jpeg_files)
-    
+
     # Write validation batches
     val_batch_start = int(math.ceil((i / 1000.0))) * 1000
     with open_tar(ILSVRC_VALIDATION_TAR, 'validation tar') as tf:
         validation_jpeg_files = sorted([tf.extractfile(m) for m in tf.getmembers()], key=lambda x:x.name)
         write_batches(args.tgt_dir, 'validation', val_batch_start, validation_labels, validation_jpeg_files)
-    
+
     # Write meta file
     meta = unpickle('input_meta')
     meta_file = os.path.join(args.tgt_dir, 'batches.meta')
@@ -155,3 +156,56 @@ if __name__ == "__main__":
     pickle(meta_file, meta)
     print "Wrote %s" % meta_file
     print "All done! ILSVRC 2012 batches are in %s" % args.tgt_dir
+
+def make_mnist():
+    import numpy as np
+
+    parser = argp.ArgumentParser()
+    parser.add_argument('--src-dir', help='Directory containing ILSVRC2012_img_train.tar, ILSVRC2012_img_val.tar, and ILSVRC2012_devkit_t12.tar.gz', required=True)
+    parser.add_argument('--tgt-dir', help='Directory to output ILSVRC 2012 batches suitable for cuda-convnet to train on.', required=True)
+    args = parser.parse_args()
+    source_dir = args.src_dir
+    target_dir = args.tgt_dir
+    makedir(target_dir)
+
+    # Available at http://deeplearning.net/data/mnist/mnist.pkl.gz
+    MNIST_DATA = os.path.join(source_dir, "mnist.pkl.gz")
+
+    batch_size = 10000
+    image_size = 28
+    label_names = ["%d" % i for i in range(10)]
+
+    with gzip.open(MNIST_DATA, 'rb') as f:
+        train_set, valid_set, test_set = cPickle.load(f)
+
+    full_data = np.hstack([train_set[0].T, valid_set[0].T, test_set[0].T])
+    full_labels = np.hstack([train_set[1], valid_set[1], test_set[1]])
+    # print full_data.shape
+    # print full_labels.shape
+    assert full_data.shape[-1] == full_labels.shape[-1]
+
+    for i in range(full_data.shape[-1] / batch_size):
+        batch_file = os.path.join(target_dir, 'data_batch_%d' % (i + 1))
+        pickle(batch_file,
+               {'data': full_data[:,i*batch_size:(i+1)*batch_size],
+                'labels': full_labels[i*batch_size:(i+1)*batch_size]})
+        print "Wrote %s" % batch_file
+
+    # Write meta file
+    # meta = unpickle('input_meta')
+    # print meta['data_mean'].shape
+    meta = {'data_mean': full_data.mean(axis=-1, keepdims=True),
+            'batch_size': batch_size,
+            'img_size': image_size,
+            'num_vis': image_size**2 * 1,
+            'label_names': label_names}
+    meta_file = os.path.join(args.tgt_dir, 'batches.meta')
+    # meta.update({)
+    # print meta.keys()
+    pickle(meta_file, meta)
+    print "Wrote %s" % meta_file
+    print "All done! MNIST batches are in %s" % target_dir
+
+if __name__ == "__main__":
+    # make_ilsvrc()
+    make_mnist()
