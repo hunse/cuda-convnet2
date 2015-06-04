@@ -69,17 +69,16 @@ def build_layer(layer, inputs, data):
         assert nlabels == 1
 
         def label_error(t, x, labels=labels):
-            return np.argmax(x) != labels[get_ind(t)]
+            return np.argmax(x) != labels[get_ind(t) % len(labels)]
 
         u = nengo.Node(label_error, size_in=nprobs)
         nengo.Connection(probs, u, synapse=None)
         return u
-        # return nengo.Probe(u)
 
     if layer['type'] == 'data':
         if name == 'data':
             def image_output(t, images=data[name]):
-                return images[get_ind(t)].ravel()
+                return images[get_ind(t) % len(images)].ravel()
 
             return nengo.Node(image_output)
         else:
@@ -113,7 +112,7 @@ def build_layer(layer, inputs, data):
                 alpha = 0.825
                 amp = 0.063
                 sigma = params.get('g', params.get('a', None))
-                noise = 0.0
+                noise = params.get('n', 0.0)
             else:
                 tau_ref = params['t']
                 tau_rc = params['r']
@@ -122,8 +121,10 @@ def build_layer(layer, inputs, data):
                 sigma = params['g']
                 noise = params['n']
             # print neuron
-            # e.neuron_type = SoftLIFRate(sigma=params['g'], tau_rc=params['r'], tau_ref=params['t'])
-            # e.neuron_type = nengo.LIFRate(tau_rc=params['r'], tau_ref=params['t'])
+            # print tau_ref, tau_rc, alpha, amp, sigma, noise
+
+            # e.neuron_type = SoftLIFRate(sigma=sigma, tau_rc=tau_rc, tau_ref=tau_ref)
+            # e.neuron_type = nengo.LIFRate(tau_rc=tau_rc, tau_ref=tau_ref)
             e.neuron_type = nengo.LIF(tau_rc=tau_rc, tau_ref=tau_ref)
             e.gain = alpha * np.ones(n)
             e.bias = 1. * np.ones(n)
@@ -313,6 +314,7 @@ def run(loadfile, savefile=None, multiview=None):
 
     network = nengo.Network()
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
+    # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.001)
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.005)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.003)
     network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
@@ -327,7 +329,7 @@ def run(loadfile, savefile=None, multiview=None):
 
     sim = nengo.Simulator(network)
     # sim.run(3 * presentation_time)
-    # sim.run(20 * presentation_time)
+    # sim.run(10 * presentation_time)
     # sim.run(100 * presentation_time)
     sim.run(1000 * presentation_time)
 
@@ -336,8 +338,8 @@ def run(loadfile, savefile=None, multiview=None):
     y = sim.data[yp]
     z = sim.data[zp]
 
-    # inds = slice(0, get_ind(t[-2]) + 1)
-    inds = slice(0, get_ind(t[-1]) + 1)
+    inds = slice(0, get_ind(t[-2]) + 1)
+    # inds = slice(0, get_ind(t[-1]) + 1)
     images = data['data'][inds]
     labels = data['labels'][inds]
     data_mean = data['data_mean']
@@ -352,7 +354,7 @@ def run(loadfile, savefile=None, multiview=None):
 
     # view(dt, images, labels, data_mean, label_names, t, y, z)
     errors, y, z = error(dt, labels, t, y, z)
-    print("Error: %f" % errors.mean())
+    print "Error: %f (%d samples)" % (errors.mean(), errors.size)
 
 
 def error(dt, labels, t, y, z):
@@ -362,7 +364,7 @@ def error(dt, labels, t, y, z):
     if 0:
         z = nengo.synapses.filtfilt(z, s, dt)
     else:
-        lt = labels[(t / presentation_time).astype(int)]
+        lt = labels[(t / presentation_time).astype(int) % len(labels)]
         z = (np.argmax(y, axis=1) != lt)
 
     # take 10 ms at end of each presentation
