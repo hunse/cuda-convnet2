@@ -310,6 +310,7 @@ def run_layer(loadfile):
 
 
 def run(loadfile, savefile=None, multiview=None):
+    assert not multiview
     layers, data = load_network(loadfile, multiview)
 
     network = nengo.Network()
@@ -326,6 +327,11 @@ def run(loadfile, savefile=None, multiview=None):
         # xp = nengo.Probe(outputs['data'], synapse=None)
         yp = nengo.Probe(outputs['fc10'], synapse=None)
         zp = nengo.Probe(outputs['logprob'], synapse=None)
+        spikes_p = {}
+        for name in layers:
+            if layers[name]['type'] == 'neuron':
+                # node outputs scaled spikes
+                spikes_p[name] = nengo.Probe(outputs[name])
 
     sim = nengo.Simulator(network)
     # sim.run(3 * presentation_time)
@@ -337,6 +343,7 @@ def run(loadfile, savefile=None, multiview=None):
     t = sim.trange()
     y = sim.data[yp]
     z = sim.data[zp]
+    spikes = {k: sim.data[v] for k, v in spikes_p.items()}
 
     inds = slice(0, get_ind(t[-2]) + 1)
     # inds = slice(0, get_ind(t[-1]) + 1)
@@ -349,7 +356,7 @@ def run(loadfile, savefile=None, multiview=None):
         np.savez(savefile,
                  images=images, labels=labels,
                  data_mean=data_mean, label_names=label_names,
-                 dt=dt, t=t, y=y, z=z)
+                 dt=dt, t=t, y=y, z=z, spikes=spikes)
         print("Saved '%s'" % savefile)
 
     # view(dt, images, labels, data_mean, label_names, t, y, z)
@@ -410,10 +417,10 @@ if __name__ == '__main__':
 
     import argparse
     parser = argparse.ArgumentParser(description="Run network in Nengo")
-    parser.add_argument('--multiview', action='store_const', const=1, default=None)
+    # parser.add_argument('--multiview', action='store_const', const=1, default=None)
     parser.add_argument('loadfile', help="Checkpoint to load")
     parser.add_argument('savefile', nargs='?', default=None, help="Where to save output")
 
     args = parser.parse_args()
     savefile = args.loadfile.rstrip('/') + '.npz' if args.savefile is None else args.savefile
-    run(args.loadfile, savefile, args.multiview)
+    run(args.loadfile, savefile)
