@@ -1,8 +1,8 @@
 
 DATA=(--data-path ~/data/mnist-py-colmajor/
       --data-provider mnist
-      --inner-size 0)
-      # --inner-size 22)
+      # --inner-size 0)
+      --inner-size 22)
 
 LAYERS=(--layer-def ./layers/layers-mnist-lif.cfg)
 LAYERS+=(--layer-params ./layers/layer-params-mnist-lif.cfg)
@@ -11,7 +11,7 @@ OPTS=(--save-path ./checkpoints
       --gpu 0
       --test-freq 30)
 
-EPOCHS=200
+EPOCHS=100
 
 if [[ $1 == "" ]];
 then
