@@ -1,14 +1,14 @@
 
 DATA=(--data-path ~/data/mnist-py-colmajor/
       --data-provider mnist
-      # --inner-size 0)
-      --inner-size 26)
+      --inner-size 0)
+      # --inner-size 26)
       # --inner-size 22)
 
+# LAYERS=(--layer-def ./layers/layers-mnist-relu.cfg)
+# LAYERS+=(--layer-params ./layers/layer-params-mnist-relu.cfg)
 LAYERS=(--layer-def ./layers/layers-mnist-lif.cfg)
 LAYERS+=(--layer-params ./layers/layer-params-mnist-lif.cfg)
-# LAYERS=(--layer-def ./layers/layers-mnist-1.cfg)
-# LAYERS+=(--layer-params ./layers/layer-params-mnist-1.cfg)
 
 OPTS=(--save-path ./checkpoints
       --gpu 0
