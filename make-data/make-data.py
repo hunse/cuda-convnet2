@@ -161,8 +161,8 @@ def make_mnist():
     import numpy as np
 
     parser = argp.ArgumentParser()
-    parser.add_argument('--src-dir', help='Directory containing ILSVRC2012_img_train.tar, ILSVRC2012_img_val.tar, and ILSVRC2012_devkit_t12.tar.gz', required=True)
-    parser.add_argument('--tgt-dir', help='Directory to output ILSVRC 2012 batches suitable for cuda-convnet to train on.', required=True)
+    parser.add_argument('--src-dir', help='Directory containing mnist.pkl.gz', required=True)
+    parser.add_argument('--tgt-dir', help='Directory for output batches', required=True)
     args = parser.parse_args()
     source_dir = args.src_dir
     target_dir = args.tgt_dir
@@ -180,8 +180,6 @@ def make_mnist():
 
     full_data = np.hstack([train_set[0].T, valid_set[0].T, test_set[0].T])
     full_labels = np.hstack([train_set[1], valid_set[1], test_set[1]])
-    # print full_data.shape
-    # print full_labels.shape
     assert full_data.shape[-1] == full_labels.shape[-1]
 
     for i in range(full_data.shape[-1] / batch_size):
@@ -192,20 +190,85 @@ def make_mnist():
         print "Wrote %s" % batch_file
 
     # Write meta file
-    # meta = unpickle('input_meta')
-    # print meta['data_mean'].shape
     meta = {'data_mean': full_data.mean(axis=-1, keepdims=True),
             'batch_size': batch_size,
             'img_size': image_size,
             'num_vis': image_size**2 * 1,
             'label_names': label_names}
     meta_file = os.path.join(args.tgt_dir, 'batches.meta')
-    # meta.update({)
-    # print meta.keys()
     pickle(meta_file, meta)
     print "Wrote %s" % meta_file
     print "All done! MNIST batches are in %s" % target_dir
 
+def make_svhn():
+    import numpy as np
+    import scipy.io.matlab
+    rng = np.random.RandomState(8)
+
+    parser = argp.ArgumentParser()
+    parser.add_argument('--src-dir', help='Directory containing train_32x32.mat and test_32x32.mat', required=True)
+    parser.add_argument('--tgt-dir', help='Directory for output batches', required=True)
+    args = parser.parse_args()
+    source_dir = args.src_dir
+    target_dir = args.tgt_dir
+    makedir(target_dir)
+
+    # available at http://ufldl.stanford.edu/housenumbers/
+    SVHN_TRAIN_DATA = os.path.join(source_dir, "train_32x32.mat")
+    SVHN_TEST_DATA = os.path.join(source_dir, "test_32x32.mat")
+    # SVHN_EXTRA_DATA = os.path.join(source_dir, "extra_32x32.mat")
+
+    # batch_size = 10000
+    batch_size = 8000
+    image_size = 32
+    label_names = ["%d" % i for i in range(10)]
+
+    def load(path):
+        data = scipy.io.matlab.loadmat(path)
+        X, y = data['X'], data['y'].ravel()
+        X = np.transpose(X, (2, 0, 1, 3)).reshape(-1, X.shape[-1])
+        y[y == 10] = 0  # 10 actually means 0
+        assert X.shape[-1] == y.size
+        print("Loaded %r (%d images)" % (path, y.size))
+
+        # shuffle
+        i = rng.permutation(y.size)
+        X, y = X[:, i], y[i]
+
+        # clip to multiple of batch size
+        n = int(y.size / batch_size) * batch_size
+        X, y = X[:, :n], y[:n]
+        print("Clipped to %d images" % n)
+
+        return X, y
+
+    train_set = load(SVHN_TRAIN_DATA)
+    test_set = load(SVHN_TEST_DATA)
+    # extra_set = load(SVHN_EXTRA_DATA)
+
+    full_data = np.hstack([train_set[0], test_set[0]])
+    full_labels = np.hstack([train_set[1], test_set[1]])
+    assert full_data.shape[-1] == full_labels.size
+
+    for i in range(full_labels.size / batch_size):
+        batch_file = os.path.join(target_dir, 'data_batch_%d' % (i + 1))
+        pickle(batch_file,
+               {'data': full_data[:,i*batch_size:(i+1)*batch_size],
+                'labels': full_labels[i*batch_size:(i+1)*batch_size]})
+        print "Wrote %s" % batch_file
+
+    # Write meta file
+    meta = {'data_mean': full_data.mean(axis=-1, keepdims=True),
+            'batch_size': batch_size,
+            'img_size': image_size,
+            'num_vis': image_size**2 * 1,
+            'label_names': label_names}
+    meta_file = os.path.join(args.tgt_dir, 'batches.meta')
+    pickle(meta_file, meta)
+    print "Wrote %s" % meta_file
+    print "All done! SVHN batches are in %s" % target_dir
+
 if __name__ == "__main__":
     # make_ilsvrc()
-    make_mnist()
+    # make_mnist()
+    make_svhn()

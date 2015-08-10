@@ -236,7 +236,7 @@ class CIFARDataProvider(LabeledDataProvider):
 
         cropped = self.cropped_data[self.batches_generated % 2]
 
-        self.__trim_borders(self.data_dic[bidx]['data'], cropped)
+        self._trim_borders(self.data_dic[bidx]['data'], cropped)
         cropped -= self.data_mean
         self.batches_generated += 1
         return epoch, batchnum, [cropped, self.data_dic[bidx]['labels']]
@@ -249,10 +249,11 @@ class CIFARDataProvider(LabeledDataProvider):
     # fed to pylab for plotting.
     # This is used by shownet.py to plot test case predictions.
     def get_plottable_data(self, data):
-        data = n.require((data + self.data_mean).T.reshape(data.shape[1], self.num_colors, self.inner_size, self.inner_size).swapaxes(1,3).swapaxes(1,2) / 255.0, dtype=n.single)
+        data = (data + self.data_mean).T.reshape(data.shape[1], self.num_colors, self.inner_size, self.inner_size)
+        data = n.require(data.swapaxes(1,3).swapaxes(1,2) / 255.0, dtype=n.single)
         return data.reshape(data.shape[:-1]) if self.num_colors == 1 else data
 
-    def __trim_borders(self, x, target):
+    def _trim_borders(self, x, target):
         y = x.reshape(self.num_colors, self.img_size, self.img_size, x.shape[1])
 
         if self.test: # don't need to loop over cases
@@ -280,7 +281,7 @@ class MNISTDataProvider(CIFARDataProvider):
         LabeledDataProvider.__init__(self, data_dir, batch_range, init_epoch, init_batchnum, dp_params, test)
         self.img_size = 28
         self.num_colors = 1
-        self.inner_size =  dp_params['inner_size'] if dp_params['inner_size'] > 0 else self.batch_meta['img_size']
+        self.inner_size = dp_params['inner_size'] if dp_params['inner_size'] > 0 else self.batch_meta['img_size']
         self.border_size = (self.img_size - self.inner_size) / 2
         self.multiview = dp_params['multiview_test'] and test
         self.num_views = 9
@@ -298,7 +299,7 @@ class MNISTDataProvider(CIFARDataProvider):
         self.batches_generated = 0
         self.data_mean = self.batch_meta['data_mean'].reshape((self.num_colors,self.img_size,self.img_size))[:,self.border_size:self.border_size+self.inner_size,self.border_size:self.border_size+self.inner_size].reshape((self.get_data_dims(), 1))
 
-    def __trim_borders(self, x, target):
+    def _trim_borders(self, x, target):
         y = x.reshape(self.num_colors, self.img_size, self.img_size, x.shape[1])
 
         if self.test: # don't need to loop over cases
@@ -321,6 +322,29 @@ class MNISTDataProvider(CIFARDataProvider):
                 #     pic = pic[:,:,::-1]
                 target[:,c] = pic.reshape((self.get_data_dims(),))
 
+class SVHNDataProvider(MNISTDataProvider):
+    def __init__(self, data_dir, batch_range=None, init_epoch=1, init_batchnum=None, dp_params=None, test=False):
+        LabeledDataProvider.__init__(self, data_dir, batch_range, init_epoch, init_batchnum, dp_params, test)
+        self.img_size = 32
+        self.num_colors = 3
+        self.inner_size = dp_params['inner_size'] if dp_params['inner_size'] > 0 else self.batch_meta['img_size']
+        self.border_size = (self.img_size - self.inner_size) / 2
+        self.multiview = dp_params['multiview_test'] and test
+        self.num_views = 9
+        self.scalar_mean = dp_params['scalar_mean']
+        self.data_mult = self.num_views if self.multiview else 1
+        self.data_dic = []
+        for i in batch_range:
+            self.data_dic += [unpickle(self.get_data_file_name(i))]
+            self.data_dic[-1]["labels"] = n.require(self.data_dic[-1]['labels'], dtype=n.single)
+            self.data_dic[-1]["labels"] = n.require(n.tile(self.data_dic[-1]["labels"].reshape((1, n.prod(self.data_dic[-1]["labels"].shape))), (1, self.data_mult)), requirements='C')
+            self.data_dic[-1]['data'] = n.require(self.data_dic[-1]['data'] - self.scalar_mean, dtype=n.single, requirements='C')
+
+        self.cropped_data = [n.zeros((self.get_data_dims(), self.data_dic[0]['data'].shape[1]*self.data_mult), dtype=n.single) for x in xrange(2)]
+
+        self.batches_generated = 0
+        self.data_mean = self.batch_meta['data_mean'].reshape((self.num_colors,self.img_size,self.img_size))[:,self.border_size:self.border_size+self.inner_size,self.border_size:self.border_size+self.inner_size].reshape((self.get_data_dims(), 1))
+
 class DummyConvNetLogRegDataProvider(LabeledDummyDataProvider):
     def __init__(self, data_dim):
         LabeledDummyDataProvider.__init__(self, data_dim)
@@ -342,13 +366,12 @@ DataProvider.register_data_provider('dummy-lr-n', 'Dummy ConvNet logistic regres
 DataProvider.register_data_provider('image', 'JPEG-encoded image data provider', ImageDataProvider)
 DataProvider.register_data_provider('cifar', 'CIFAR-10 data provider', CIFARDataProvider)
 DataProvider.register_data_provider('mnist', 'MNIST data provider', MNISTDataProvider)
+DataProvider.register_data_provider('svhn', 'SVHN data provider', SVHNDataProvider)
 
 
-if __name__ == '__main__':
+def test_data_provider(dp):
     import matplotlib.pyplot as plt
 
-    dp_params = dict(inner_size=24, multiview_test=0, scalar_mean=0)
-    dp = MNISTDataProvider('/home/ehunsber/data/mnist-py-colmajor', range(2, 8), dp_params=dp_params, test=True)
     epoch, batchnum, [data, labels] = dp.get_next_batch()
     data = dp.get_plottable_data(data)
 
@@ -357,4 +380,24 @@ if __name__ == '__main__':
     for i in range(r * c):
         plt.subplot(r, c, i+1)
         plt.imshow(data[i], cmap='gray')
+        plt.title(labels[0, i])
     plt.show()
+
+
+def test_mnist_data_provider():
+    # dp_params = dict(inner_size=24, multiview_test=0, scalar_mean=0)
+    dp_params = dict(inner_size=0, multiview_test=0, scalar_mean=0)
+    dp = MNISTDataProvider('/home/ehunsber/data/mnist-py-colmajor', range(2, 8), dp_params=dp_params, test=False)
+    test_data_provider(dp)
+
+
+def test_svhn_data_provider():
+    # dp_params = dict(inner_size=24, multiview_test=0, scalar_mean=0)
+    dp_params = dict(inner_size=0, multiview_test=0, scalar_mean=0)
+    dp = SVHNDataProvider('/home/ehunsber/data/svhn', range(2, 8), dp_params=dp_params, test=False)
+    test_data_provider(dp)
+
+
+if __name__ == '__main__':
+    # test_mnist_data_provider()
+    test_svhn_data_provider()

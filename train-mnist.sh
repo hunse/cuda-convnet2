@@ -1,7 +1,8 @@
 
 DATA=(--data-path ~/data/mnist-py-colmajor/
       --data-provider mnist
-      --inner-size 0)
+      # --inner-size 0)
+      --inner-size 26)
       # --inner-size 22)
 
 LAYERS=(--layer-def ./layers/layers-mnist-lif.cfg)
