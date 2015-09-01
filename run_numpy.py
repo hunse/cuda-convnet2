@@ -8,7 +8,7 @@ import theano.tensor as tt
 # dtype = theano.config.floatX
 
 # from convnet import ConvNet
-from run_core import load_network
+from run_core import load_network, SoftLIFRate
 
 rng = np.random.RandomState(9)
 
@@ -50,26 +50,16 @@ def compute_layer(layer, inputs):
                 alpha = 0.825
                 amp = 0.063
                 sigma = params.get('g', params.get('a', None))
-                noise = 0.0
+                noise = params.get('n', 0.0)
             else:
-                tau_ref = params['t']
-                tau_rc = params['r']
-                alpha = params['a']
-                amp = params['m']
-                sigma = params['g']
-                noise = params['n']
-            tau_ref = np.array(tau_ref, dtype='float32')
-            tau_rc = np.array(tau_rc, dtype='float32')
-            amp = np.array(amp, dtype='float32')
-            alpha = np.array(alpha, dtype='float32')
-            sigma = np.array(sigma, dtype='float32')
-            x = x.astype('float32')
-            y = (alpha / sigma) * x
-            j = sigma * np.where(y > 4.0, y, np.log1p(np.exp(y)))
-            r = amp / (tau_ref + tau_rc * np.log1p(1. / j))
-            # print "noising"
-            # r[y > 0] += rng.normal(scale=amp * noise, size=(y > 0).sum())
-            return np.where(j > 0, r, 0.0)
+                tau_ref, tau_rc, alpha, amp, sigma, noise = [
+                    np.array(params[k], dtype=np.float32)
+                    for k in ['t', 'r', 'a', 'm', 'g', 'n']]
+
+            lif = SoftLIFRate(sigma=sigma, tau_rc=tau_rc, tau_ref=tau_ref)
+            bias = np.ones_like(alpha)
+            r = amp * lif.rates(x.astype(np.float32), alpha, bias)
+            return r
         raise NotImplementedError(ntype)
     if layer['type'] == 'softmax':
         assert x.ndim == 2
@@ -202,15 +192,18 @@ def compute_layers(layers, output_dict):
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description="Run network in Nengo")
+    parser = argparse.ArgumentParser(description="Run network in Numpy")
     parser.add_argument('loadfile', help="Checkpoint to load")
+    parser.add_argument('--histfile', help="Save layer histograms")
+    parser.add_argument('--n', type=int, help="Number of images to test")
 
     args = parser.parse_args()
     layers, data = load_network(args.loadfile)
 
-    inds = slice(None)
+    # inds = slice(None)
     # inds = slice(0, 20)
     # inds = slice(0, 100)
+    inds = slice(0, args.n)
     images = data['data'][inds]
     labels = data['labels'][inds]
 
@@ -236,14 +229,28 @@ if __name__ == '__main__':
     compute_layers(layers, output_dict)
 
     def print_acts(name):
-        layer = layers[name]
-        if 'inputs' in layer:
-            for parent in layer['inputs']:
-                print_acts(parent)
+        for parent in layers[name].get('inputs', []):
+            print_acts(parent)
 
         output = output_dict[name]
-        print "%15s: %10f %10f [%10f %10f]" % (name, output.mean(), output.std(), output.min(), output.max())
+        print("%15s: %10f %10f [%10f %10f]" % (
+            name, output.mean(), output.std(), output.min(), output.max()))
 
     print_acts('probs')
+    print(output_dict['logprob'])
 
-    print output_dict['logprob']
+    if args.histfile is not None:
+        hist_dict = {}
+        def hist_acts(name):
+            output = output_dict[name]
+            hist, edges = np.histogram(output.ravel(), bins=30)
+            hist_dict[name] = (hist, edges)
+
+            # compute parents
+            for parent in layers[name].get('inputs', []):
+                hist_acts(parent)
+
+        hist_acts('probs')
+        print(hist_dict)
+        np.savez(args.histfile, **hist_dict)
+        print("Saved %r" % args.histfile)
