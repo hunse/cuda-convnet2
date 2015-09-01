@@ -5,60 +5,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 import nengo
 
-from run_core import load_network
+from run_core import load_network, SoftLIFRate
 
 presentation_time = 0.15
 get_ind = lambda t: int(t / presentation_time)
 
 
-def softrelu(x, sigma=1.):
-    y = x / sigma
-    z = np.array(x)
-    z[y < 34.0] = sigma * np.log1p(np.exp(y[y < 34.0]))
-    # ^ 34.0 gives exact answer in 32 or 64 bit but doesn't overflow in 32 bit
-    return z
+def hist_dist(hist, edges):
+    p = np.zeros(edges.size, dtype=float)
+    p[1:-1] = hist[:-1] + hist[1:]
+    p /= p.sum()
+    return nengo.dists.PDF(edges, p)
 
 
-class SoftLIFRate(nengo.neurons.LIFRate):
-    sigma = nengo.params.NumberParam(low=0)
-
-    def __init__(self, sigma=1., **lif_args):
-        super(SoftLIFRate, self).__init__(**lif_args)
-        self.sigma = sigma
-
-    @property
-    def _argreprs(self):
-        args = super(SoftLIFRate, self)._argreprs
-        if self.sigma != 1.:
-            args.append("sigma=%s" % self.sigma)
-        return args
-
-    def rates(self, x, gain, bias):
-        J = gain * x + bias
-        out = np.zeros_like(J)
-        SoftLIFRate.step_math(self, dt=1, J=J, output=out)
-        return out
-
-    def step_math(self, dt, J, output):
-        """Compute rates in Hz for input current (incl. bias)"""
-        # x = (J - 1) / self.sigma
-        # j = self.sigma * np.where(x > 4.0, x, np.log1p(np.exp(x)))
-        j = softrelu(J - 1, sigma=self.sigma)
-        output[:] = 0  # faster than output[j <= 0] = 0
-        output[j > 0] = 1. / (
-            self.tau_ref + self.tau_rc * np.log1p(1. / j[j > 0]))
-
-
-def test_softlifrate():
-    neurons = SoftLIFRate(sigma=0.002, tau_rc=0.02, tau_ref=0.002)
-    x = np.linspace(-1, 1, 101)
-    # j = 0.8 * x + 1.
-    r = neurons.rates(x, 1., 1.)
-    plt.plot(x, r)
-    plt.show()
-
-
-def build_layer(layer, inputs, data):
+def build_layer(layer, inputs, data, hist=None):
     assert isinstance(inputs, list)
     assert len(layer.get('inputs', [])) == len(inputs)
     name = layer['name']
@@ -93,6 +53,17 @@ def build_layer(layer, inputs, data):
         ntype = neuron['type']
         n = layer['outputs']
 
+        if hist is not None:
+            # approximate function using NEF
+            dist = hist_dist(*hist)
+            e = nengo.networks.EnsembleArray(
+                5, n, eval_points=dist, intercepts=dist)
+            nengo.Connection(input0, e.input)
+            if ntype == 'relu':
+                e.add_output('relu', lambda x: np.maximum(x, 0), synapse=None)
+                return e.relu
+            raise NotImplementedError(ntype)
+
         e = nengo.Ensemble(n, 1)
         nengo.Connection(input0, e.neurons)
 
@@ -114,14 +85,8 @@ def build_layer(layer, inputs, data):
                 sigma = params.get('g', params.get('a', None))
                 noise = params.get('n', 0.0)
             else:
-                tau_ref = params['t']
-                tau_rc = params['r']
-                alpha = params['a']
-                amp = params['m']
-                sigma = params['g']
-                noise = params['n']
-            # print neuron
-            # print tau_ref, tau_rc, alpha, amp, sigma, noise
+                tau_ref, tau_rc, alpha, amp, sigma, noise = [
+                    params[k] for k in ['t', 'r', 'a', 'm', 'g', 'n']]
 
             # e.neuron_type = SoftLIFRate(sigma=sigma, tau_rc=tau_rc, tau_ref=tau_ref)
             # e.neuron_type = nengo.LIFRate(tau_rc=tau_rc, tau_ref=tau_ref)
@@ -150,30 +115,13 @@ def build_layer(layer, inputs, data):
         c = layer['channels'][0]
         f = layer['filters']
         s = layer['filterSize'][0]
-        s2 = (s - 1) / 2
-        nx = int(np.sqrt(layer['numInputs'][0] / c))
-        ny = layer['modulesX']
+        n = int(np.sqrt(layer['numInputs'][0] / c))
+        assert n == layer['modulesX']
 
         filters = layer['weights'][0].reshape(c, s, s, f)
         filters = np.rollaxis(filters, axis=-1, start=0)
-        biases = layer['biases'].reshape(f, 1, 1)
-
-        def conv(_, x, filters=filters, biases=biases):
-            x = x.reshape(c, nx, nx)
-            y = np.zeros((f, ny, ny))
-            for i in range(ny):
-                for j in range(ny):
-                    i0, i1 = i-s2, i+s2+1
-                    j0, j1 = j-s2, j+s2+1
-                    w = filters[:, :, max(-i0, 0):min(nx+s-i1, s),
-                                      max(-j0, 0):min(nx+s-j1, s)]
-                    xij = x[:, max(i0, 0):min(i1, nx), max(j0, 0):min(j1, nx)]
-                    y[:, i, j] = np.dot(xij.ravel(), w.reshape(f, -1).T)
-
-            y += biases
-            return y.ravel()
-
-        u = nengo.Node(conv, size_in=layer['numInputs'][0])
+        biases = layer['biases']
+        u = nengo.Node(nengo.processes.Conv2((c, n, n), filters, biases))
         nengo.Connection(input0, u)
         return u
     if layer['type'] == 'local':
@@ -184,29 +132,13 @@ def build_layer(layer, inputs, data):
         f = layer['filters']
         s = layer['filterSize'][0]
         s2 = (s - 1) / 2
-        nx = int(np.sqrt(layer['numInputs'][0] / c))
-        ny = layer['modulesX']
+        n = int(np.sqrt(layer['numInputs'][0] / c))
+        assert n == layer['modulesX']
 
-        filters = layer['weights'][0].reshape(ny, ny, c, s, s, f)
+        filters = layer['weights'][0].reshape(n, n, c, s, s, f)
         filters = np.rollaxis(filters, axis=-1, start=0)
         biases = layer['biases'][0].reshape(1, 1, 1)
-
-        def local(_, x, filters=filters, biases=biases):
-            x = x.reshape(c, nx, nx)
-            y = np.zeros((f, ny, ny), dtype=x.dtype)
-            for i in range(ny):
-                for j in range(ny):
-                    i0, i1 = i-s2, i+s2+1
-                    j0, j1 = j-s2, j+s2+1
-                    w = filters[:, i, j, :, max(-i0, 0):min(nx+s-i1, s),
-                                            max(-j0, 0):min(nx+s-j1, s)]
-                    xij = x[:, max(i0, 0):min(i1, nx), max(j0, 0):min(j1, nx)]
-                    y[:, i, j] = np.dot(xij.ravel(), w.reshape(f, -1).T)
-
-            y += biases
-            return y.ravel()
-
-        u = nengo.Node(local, size_in=layer['numInputs'][0])
+        u = nengo.Node(nengo.processes.Conv2((c, n, n), filters, biases))
         nengo.Connection(input0, u)
         return u
     if layer['type'] == 'pool':
@@ -249,7 +181,7 @@ def build_layer(layer, inputs, data):
     raise NotImplementedError(layer['type'])
 
 
-def build_target_layer(target_key, layers, data, network, outputs=None):
+def build_target_layer(target_key, layers, data, network, outputs=None, hists=None):
     if outputs is None:
         outputs = {}
     elif target_key in outputs:
@@ -259,11 +191,12 @@ def build_target_layer(target_key, layers, data, network, outputs=None):
     input_keys = layer.get('inputs', [])
     for input_key in input_keys:
         if input_key not in outputs:
-            build_target_layer(input_key, layers, data, network, outputs)
+            build_target_layer(input_key, layers, data, network, outputs, hists=hists)
 
     inputs = [outputs[key] for key in input_keys]
     with network:
-        outputs[target_key] = build_layer(layer, inputs, data)
+        hist = hists[target_key] if target_key in hists else None
+        outputs[target_key] = build_layer(layer, inputs, data, hist=hist)
 
     return outputs
 
@@ -309,10 +242,13 @@ def run_layer(loadfile):
     assert np.allclose(yref, y)
 
 
-def run(loadfile, savefile=None, multiview=None):
+def run(loadfile, savefile=None, multiview=None, histfile=None):
     assert not multiview
-    layers, data = load_network(loadfile, multiview)
 
+    layers, data = load_network(loadfile, multiview)
+    hists = np.load(histfile) if histfile is not None else {}
+
+    # --- build network in Nengo
     network = nengo.Network()
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.001)
@@ -320,30 +256,31 @@ def run(loadfile, savefile=None, multiview=None):
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.003)
     network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
 
-    outputs = build_target_layer('logprob', layers, data, network)
+    outputs = build_target_layer('logprob', layers, data, network, hists=hists)
 
     # test whole network
     with network:
         # xp = nengo.Probe(outputs['data'], synapse=None)
         yp = nengo.Probe(outputs['fc10'], synapse=None)
         zp = nengo.Probe(outputs['logprob'], synapse=None)
-        spikes_p = {}
-        for name in layers:
-            if layers[name]['type'] == 'neuron':
-                # node outputs scaled spikes
-                spikes_p[name] = nengo.Probe(outputs[name])
+        # spikes_p = {}
+        # for name in layers:
+        #     if layers[name]['type'] == 'neuron':
+        #         # node outputs scaled spikes
+        #         spikes_p[name] = nengo.Probe(outputs[name])
 
     sim = nengo.Simulator(network)
+    # sim.run(0.005)
     # sim.run(3 * presentation_time)
-    # sim.run(10 * presentation_time)
-    # sim.run(100 * presentation_time)
-    sim.run(1000 * presentation_time)
+    # sim.run(20 * presentation_time)
+    sim.run(100 * presentation_time)
+    # sim.run(1000 * presentation_time)
 
     dt = sim.dt
     t = sim.trange()
     y = sim.data[yp]
     z = sim.data[zp]
-    spikes = {k: sim.data[v] for k, v in spikes_p.items()}
+    # spikes = {k: sim.data[v] for k, v in spikes_p.items()}
 
     inds = slice(0, get_ind(t[-2]) + 1)
     # inds = slice(0, get_ind(t[-1]) + 1)
@@ -352,16 +289,17 @@ def run(loadfile, savefile=None, multiview=None):
     data_mean = data['data_mean']
     label_names = data['label_names']
 
+    # view(dt, images, labels, data_mean, label_names, t, y, z)
+    errors, y, z = error(dt, labels, t, y, z)
+    print "Error: %f (%d samples)" % (errors.mean(), errors.size)
+
     if savefile is not None:
         np.savez(savefile,
                  images=images, labels=labels,
                  data_mean=data_mean, label_names=label_names,
-                 dt=dt, t=t, y=y, z=z, spikes=spikes)
+                 dt=dt, t=t, y=y, z=z)
+                 # dt=dt, t=t, y=y, z=z, spikes=spikes)
         print("Saved '%s'" % savefile)
-
-    # view(dt, images, labels, data_mean, label_names, t, y, z)
-    errors, y, z = error(dt, labels, t, y, z)
-    print "Error: %f (%d samples)" % (errors.mean(), errors.size)
 
 
 def error(dt, labels, t, y, z):
@@ -420,7 +358,8 @@ if __name__ == '__main__':
     # parser.add_argument('--multiview', action='store_const', const=1, default=None)
     parser.add_argument('loadfile', help="Checkpoint to load")
     parser.add_argument('savefile', nargs='?', default=None, help="Where to save output")
+    parser.add_argument('--histfile', help="Layer histograms created by run_numpy")
 
     args = parser.parse_args()
     savefile = args.loadfile.rstrip('/') + '.npz' if args.savefile is None else args.savefile
-    run(args.loadfile, savefile)
+    run(args.loadfile, savefile, histfile=args.histfile)
