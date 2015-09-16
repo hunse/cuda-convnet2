@@ -37,10 +37,9 @@ def build_layer(layer, inputs, data, hist=None):
 
     if layer['type'] == 'data':
         if name == 'data':
-            def image_output(t, images=data[name]):
-                return images[get_ind(t) % len(images)].ravel()
-
-            return nengo.Node(image_output)
+            images = data[name]
+            return nengo.Node(nengo.processes.PresentInput(
+                images.reshape(images.shape[0], -1), presentation_time))
         else:
             return data[name]  # just output the raw data
 
