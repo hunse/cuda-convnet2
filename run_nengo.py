@@ -144,37 +144,13 @@ def build_layer(layer, inputs, data, hist=None):
     if layer['type'] == 'pool':
         assert layer['start'] == 0
         pooltype = layer['pool']
-        st = layer['stride']
+        assert pooltype == 'avg'
         s = layer['sizeX']
+        st = layer['stride']
         c = layer['channels']
         nx = layer['imgSize']
-        ny = layer['outputsX']
 
-        def pool(_, x):
-            x = x.reshape(c, nx, nx)
-            y = x[:, ::st, ::st].copy()
-            n = np.zeros((ny, ny))
-            assert y.shape[-2] == ny and y.shape[-1] == ny
-
-            for i in range(0, s):
-                for j in range(0, s):
-                    ni = (nx - i - 1) / st + 1
-                    nj = (nx - j - 1) / st + 1
-                    xij, yij = x[:, i::st, j::st], y[:, :ni, :nj]
-                    if pooltype == 'max':
-                        yij[...] = np.maximum(yij, xij)
-                    elif pooltype == 'avg':
-                        yij += xij
-                        n[:ni, :nj] += 1
-                    else:
-                        raise NotImplementedError(pool)
-
-            if pooltype == 'avg':
-                y /= n
-
-            return y.ravel()
-
-        u = nengo.Node(pool, size_in=layer['numInputs'][0])
+        u = nengo.Node(nengo.processes.Pool2((c, nx, nx), s, stride=st))
         nengo.Connection(input0, u, synapse=None)
         return u
 
