@@ -4,6 +4,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import nengo
+import nengo_ocl
 
 from run_core import load_network, SoftLIFRate
 
@@ -244,12 +245,15 @@ def run(loadfile, savefile=None, multiview=None, histfile=None):
         #         # node outputs scaled spikes
         #         spikes_p[name] = nengo.Probe(outputs[name])
 
-    sim = nengo.Simulator(network)
+    # sim = nengo.Simulator(network)
+    sim = nengo_ocl.Simulator(network)
+
     # sim.run(0.005)
-    # sim.run(3 * presentation_time)
+    sim.run(3 * presentation_time)
     # sim.run(20 * presentation_time)
-    sim.run(100 * presentation_time)
+    # sim.run(100 * presentation_time)
     # sim.run(1000 * presentation_time)
+    # sim.run(10000 * presentation_time)
 
     dt = sim.dt
     t = sim.trange()
