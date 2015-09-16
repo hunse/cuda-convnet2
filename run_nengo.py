@@ -340,5 +340,4 @@ if __name__ == '__main__':
     parser.add_argument('--histfile', help="Layer histograms created by run_numpy")
 
     args = parser.parse_args()
-    savefile = args.loadfile.rstrip('/') + '.npz' if args.savefile is None else args.savefile
-    run(args.loadfile, savefile, histfile=args.histfile)
+    run(args.loadfile, args.savefile, histfile=args.histfile)
