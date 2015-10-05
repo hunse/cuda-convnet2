@@ -157,6 +157,56 @@ def make_ilsvrc():
     print "Wrote %s" % meta_file
     print "All done! ILSVRC 2012 batches are in %s" % args.tgt_dir
 
+def make_cifar100(fine=True):
+    import numpy as np
+
+    parser = argp.ArgumentParser()
+    parser.add_argument(
+        '--src-dir', required=True, help= "Directory containing extracted "
+        "python (http://www.cs.toronto.edu/~kriz/cifar-100-python.tar.gz)")
+    parser.add_argument(
+        '--tgt-dir', required=True, help="Directory for output batches")
+    args = parser.parse_args()
+    source_dir = args.src_dir
+    target_dir = args.tgt_dir
+    makedir(target_dir)
+
+    train = np.load(os.path.join(source_dir, 'train'))
+    test = np.load(os.path.join(source_dir, 'test'))
+    meta = np.load(os.path.join(source_dir, 'meta'))
+
+    ltype = 'fine' if fine else 'coarse'
+    lfield = '%s_labels' % ltype
+
+    train_data = train['data'].T
+    full_data = np.hstack([train_data, test['data'].T])
+    full_labels = np.hstack([train[lfield], test[lfield]])
+    label_names = meta['%s_label_names' % ltype]
+    assert full_data.shape[-1] == full_labels.shape[-1]
+
+    batch_size = 10000
+    image_size = 32
+
+    for i in range(full_data.shape[-1] / batch_size):
+        batch_file = os.path.join(target_dir, 'data_batch_%d' % (i + 1))
+        pickle(batch_file,
+               {'data': full_data[:,i*batch_size:(i+1)*batch_size],
+                'labels': full_labels[i*batch_size:(i+1)*batch_size]})
+        print "Wrote %s" % batch_file
+
+    # Write meta file
+    meta = {'data_mean': train_data.mean(axis=-1, keepdims=True),
+            'batch_size': batch_size,
+            'img_size': image_size,
+            'num_vis': image_size**2 * 3,
+            'label_names': label_names}
+    assert meta['num_vis'] == full_data.shape[0]
+    meta_file = os.path.join(args.tgt_dir, 'batches.meta')
+    pickle(meta_file, meta)
+    print "Wrote %s" % meta_file
+    print "All done! CIFAR100 batches are in %s" % target_dir
+
+
 def make_mnist():
     import numpy as np
 
@@ -270,5 +320,6 @@ def make_svhn():
 
 if __name__ == "__main__":
     # make_ilsvrc()
+    make_cifar100()
     # make_mnist()
-    make_svhn()
+    # make_svhn()
