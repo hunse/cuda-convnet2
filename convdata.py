@@ -219,10 +219,13 @@ class CIFARDataProvider(LabeledDataProvider):
         self.data_mult = self.num_views if self.multiview else 1
         self.data_dic = []
         for i in batch_range:
-            self.data_dic += [unpickle(self.get_data_file_name(i))]
-            self.data_dic[-1]["labels"] = n.require(self.data_dic[-1]['labels'], dtype=n.single)
-            self.data_dic[-1]["labels"] = n.require(n.tile(self.data_dic[-1]["labels"].reshape((1, n.prod(self.data_dic[-1]["labels"].shape))), (1, self.data_mult)), requirements='C')
-            self.data_dic[-1]['data'] = n.require(self.data_dic[-1]['data'] - self.scalar_mean, dtype=n.single, requirements='C')
+            raw = unpickle(self.get_data_file_name(i))
+            labels = n.tile(n.asarray(raw['labels'], dtype=n.single
+                                  ).reshape((1, -1)), (1, self.data_mult))
+            data = n.asarray(raw['data'], dtype=n.single) - self.scalar_mean
+            self.data_dic.append(dict(
+                labels=n.require(labels, dtype=n.single, requirements='C'),
+                data=n.require(data, dtype=n.single, requirements='C')))
 
         self.cropped_data = [n.zeros((self.get_data_dims(), self.data_dic[0]['data'].shape[1]*self.data_mult), dtype=n.single) for x in xrange(2)]
 
@@ -369,18 +372,24 @@ DataProvider.register_data_provider('mnist', 'MNIST data provider', MNISTDataPro
 DataProvider.register_data_provider('svhn', 'SVHN data provider', SVHNDataProvider)
 
 
-def test_data_provider(dp):
+def test_data_provider(dp, rng=None):
     import matplotlib.pyplot as plt
 
     epoch, batchnum, [data, labels] = dp.get_next_batch()
     data = dp.get_plottable_data(data)
+    labels = labels.ravel().astype(int)
+    label_names = dp.batch_meta['label_names']
+
+    if rng is not None:
+        i = rng.permutation(data.shape[0])
+        data, labels = data[i], labels[i]
 
     plt.figure()
     r, c = 3, 5
     for i in range(r * c):
         plt.subplot(r, c, i+1)
         plt.imshow(data[i], cmap='gray')
-        plt.title(labels[0, i])
+        plt.title(label_names[labels[i]])
     plt.show()
 
 
@@ -389,6 +398,17 @@ def test_cifar10_data_provider():
     # dp_params = dict(inner_size=0, multiview_test=0, scalar_mean=0)
     dp = CIFARDataProvider('/home/ehunsber/data/cifar-10-py-colmajor', range(1, 7), dp_params=dp_params, test=False)
     test_data_provider(dp)
+
+
+def test_cifar100_data_provider():
+    dp_params = dict(inner_size=24, multiview_test=0, scalar_mean=0)
+    # dp_params = dict(inner_size=0, multiview_test=0, scalar_mean=0)
+
+    # dp = CIFARDataProvider('/home/ehunsber/data/cifar-100-py-colmajor', range(1, 7), dp_params=dp_params, test=False)
+    dp = CIFARDataProvider('/home/ehunsber/data/cifar-100-whitened', range(1, 7), dp_params=dp_params, test=False)
+
+    # test_data_provider(dp, rng=nr)
+    test_data_provider(dp, rng=nr.RandomState(9))
 
 
 def test_mnist_data_provider():
@@ -407,5 +427,6 @@ def test_svhn_data_provider():
 
 if __name__ == '__main__':
     # test_cifar10_data_provider()
+    test_cifar100_data_provider()
     # test_mnist_data_provider()
-    test_svhn_data_provider()
+    # test_svhn_data_provider()
