@@ -194,7 +194,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description="Run network in Numpy")
     parser.add_argument('loadfile', help="Checkpoint to load")
-    parser.add_argument('--histfile', help="Save layer histograms")
+    parser.add_argument('--histsave', help="Save layer histograms")
     parser.add_argument('--n', type=int, help="Number of images to test")
 
     args = parser.parse_args()
@@ -239,7 +239,7 @@ if __name__ == '__main__':
     print_acts('probs')
     print(output_dict['logprob'])
 
-    if args.histfile is not None:
+    if args.histsave is not None:
         hist_dict = {}
         def hist_acts(name):
             output = output_dict[name]
@@ -252,5 +252,5 @@ if __name__ == '__main__':
 
         hist_acts('probs')
         print(hist_dict)
-        np.savez(args.histfile, **hist_dict)
-        print("Saved %r" % args.histfile)
+        np.savez(args.histsave, **hist_dict)
+        print("Saved %r" % args.histsave)

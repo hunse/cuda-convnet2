@@ -1,3 +1,5 @@
+import logging
+logging.basicConfig(level=logging.INFO)
 import sys
 import os
 
@@ -218,11 +220,13 @@ def run_layer(loadfile):
     assert np.allclose(yref, y)
 
 
-def run(loadfile, savefile=None, multiview=None, histfile=None):
+def run(loadfile, savefile=None, multiview=None, histload=None):
     assert not multiview
 
+    print("Creating network")
+
     layers, data = load_network(loadfile, multiview)
-    hists = np.load(histfile) if histfile is not None else {}
+    hists = np.load(histload) if histload is not None else {}
 
     # --- build network in Nengo
     network = nengo.Network()
@@ -246,14 +250,19 @@ def run(loadfile, savefile=None, multiview=None, histfile=None):
         #         spikes_p[name] = nengo.Probe(outputs[name])
 
     # sim = nengo.Simulator(network)
+    print("Creating simulator")
     sim = nengo_ocl.Simulator(network)
+    # sim = nengo_ocl.Simulator(network, profiling=True)
 
+    print("Starting run")
     # sim.run(0.005)
-    sim.run(3 * presentation_time)
+    # sim.run(3 * presentation_time)
     # sim.run(20 * presentation_time)
     # sim.run(100 * presentation_time)
-    # sim.run(1000 * presentation_time)
+    sim.run(1000 * presentation_time)
     # sim.run(10000 * presentation_time)
+
+    # sim.print_profiling()
 
     dt = sim.dt
     t = sim.trange()
@@ -337,7 +346,7 @@ if __name__ == '__main__':
     # parser.add_argument('--multiview', action='store_const', const=1, default=None)
     parser.add_argument('loadfile', help="Checkpoint to load")
     parser.add_argument('savefile', nargs='?', default=None, help="Where to save output")
-    parser.add_argument('--histfile', help="Layer histograms created by run_numpy")
+    parser.add_argument('--histload', help="Layer histograms created by run_numpy")
 
     args = parser.parse_args()
-    run(args.loadfile, args.savefile, histfile=args.histfile)
+    run(args.loadfile, args.savefile, histload=args.histload)
