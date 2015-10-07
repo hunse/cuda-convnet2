@@ -157,6 +157,7 @@ def make_ilsvrc():
     print "Wrote %s" % meta_file
     print "All done! ILSVRC 2012 batches are in %s" % args.tgt_dir
 
+
 def make_cifar100(fine=True):
     import numpy as np
 
@@ -178,14 +179,16 @@ def make_cifar100(fine=True):
     ltype = 'fine' if fine else 'coarse'
     lfield = '%s_labels' % ltype
 
+    batch_size = 10000
+    image_size = 32
+    channels = 3
+    num_vis = image_size**2 * channels
+
     train_data = train['data'].T
     full_data = np.hstack([train_data, test['data'].T])
     full_labels = np.hstack([train[lfield], test[lfield]])
     label_names = meta['%s_label_names' % ltype]
-    assert full_data.shape[-1] == full_labels.shape[-1]
-
-    batch_size = 10000
-    image_size = 32
+    assert full_data.shape == (num_vis, full_labels.size)
 
     for i in range(full_data.shape[-1] / batch_size):
         batch_file = os.path.join(target_dir, 'data_batch_%d' % (i + 1))
@@ -198,7 +201,7 @@ def make_cifar100(fine=True):
     meta = {'data_mean': train_data.mean(axis=-1, keepdims=True),
             'batch_size': batch_size,
             'img_size': image_size,
-            'num_vis': image_size**2 * 3,
+            'num_vis': num_vis,
             'label_names': label_names}
     assert meta['num_vis'] == full_data.shape[0]
     meta_file = os.path.join(args.tgt_dir, 'batches.meta')
@@ -223,14 +226,17 @@ def make_mnist():
 
     batch_size = 10000
     image_size = 28
-    label_names = ["%d" % i for i in range(10)]
+    channels = 1
+    num_vis = image_size**2 * channels
 
     with gzip.open(MNIST_DATA, 'rb') as f:
         train_set, valid_set, test_set = cPickle.load(f)
 
+    label_names = ["%d" % i for i in range(10)]
+
     full_data = np.hstack([train_set[0].T, valid_set[0].T, test_set[0].T])
     full_labels = np.hstack([train_set[1], valid_set[1], test_set[1]])
-    assert full_data.shape[-1] == full_labels.shape[-1]
+    assert full_data.shape == (num_vis, full_labels.size)
 
     for i in range(full_data.shape[-1] / batch_size):
         batch_file = os.path.join(target_dir, 'data_batch_%d' % (i + 1))
@@ -243,12 +249,13 @@ def make_mnist():
     meta = {'data_mean': full_data.mean(axis=-1, keepdims=True),
             'batch_size': batch_size,
             'img_size': image_size,
-            'num_vis': image_size**2 * 1,
+            'num_vis': num_vis,
             'label_names': label_names}
     meta_file = os.path.join(args.tgt_dir, 'batches.meta')
     pickle(meta_file, meta)
     print "Wrote %s" % meta_file
     print "All done! MNIST batches are in %s" % target_dir
+
 
 def make_svhn():
     import numpy as np
@@ -271,7 +278,8 @@ def make_svhn():
     # batch_size = 10000
     batch_size = 8000
     image_size = 32
-    label_names = ["%d" % i for i in range(10)]
+    channels = 3
+    num_vis = image_size**2 * channels
 
     def load(path):
         data = scipy.io.matlab.loadmat(path)
@@ -295,10 +303,11 @@ def make_svhn():
     train_set = load(SVHN_TRAIN_DATA)
     test_set = load(SVHN_TEST_DATA)
     # extra_set = load(SVHN_EXTRA_DATA)
+    label_names = ["%d" % i for i in range(10)]
 
     full_data = np.hstack([train_set[0], test_set[0]])
     full_labels = np.hstack([train_set[1], test_set[1]])
-    assert full_data.shape[-1] == full_labels.size
+    assert full_data.shape == (num_vis, full_labels.size)
 
     for i in range(full_labels.size / batch_size):
         batch_file = os.path.join(target_dir, 'data_batch_%d' % (i + 1))
@@ -311,15 +320,16 @@ def make_svhn():
     meta = {'data_mean': full_data.mean(axis=-1, keepdims=True),
             'batch_size': batch_size,
             'img_size': image_size,
-            'num_vis': image_size**2 * 1,
+            'num_vis': num_vis,
             'label_names': label_names}
     meta_file = os.path.join(args.tgt_dir, 'batches.meta')
     pickle(meta_file, meta)
     print "Wrote %s" % meta_file
     print "All done! SVHN batches are in %s" % target_dir
 
+
 if __name__ == "__main__":
     # make_ilsvrc()
-    make_cifar100()
+    # make_cifar100()
     # make_mnist()
-    # make_svhn()
+    make_svhn()
