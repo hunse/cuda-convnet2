@@ -209,9 +209,9 @@ class ImageDataProvider(LabeledDataProvider):
 class CIFARDataProvider(LabeledDataProvider):
     def __init__(self, data_dir, batch_range=None, init_epoch=1, init_batchnum=None, dp_params=None, test=False):
         LabeledDataProvider.__init__(self, data_dir, batch_range, init_epoch, init_batchnum, dp_params, test)
-        self.img_size = 32
-        self.num_colors = 3
-        self.inner_size =  dp_params['inner_size'] if dp_params['inner_size'] > 0 else self.batch_meta['img_size']
+        self.img_size = int(self.batch_meta['img_size'])
+        self.num_colors = int(self.batch_meta['num_vis']) / self.img_size**2
+        self.inner_size =  dp_params['inner_size'] if dp_params['inner_size'] > 0 else self.img_size
         self.border_size = (self.img_size - self.inner_size) / 2
         self.multiview = dp_params['multiview_test'] and test
         self.num_views = 9
@@ -282,9 +282,9 @@ class CIFARDataProvider(LabeledDataProvider):
 class MNISTDataProvider(CIFARDataProvider):
     def __init__(self, data_dir, batch_range=None, init_epoch=1, init_batchnum=None, dp_params=None, test=False):
         LabeledDataProvider.__init__(self, data_dir, batch_range, init_epoch, init_batchnum, dp_params, test)
-        self.img_size = 28
-        self.num_colors = 1
-        self.inner_size = dp_params['inner_size'] if dp_params['inner_size'] > 0 else self.batch_meta['img_size']
+        self.img_size = int(self.batch_meta['img_size'])
+        self.num_colors = int(self.batch_meta['num_vis']) / self.img_size**2
+        self.inner_size =  dp_params['inner_size'] if dp_params['inner_size'] > 0 else self.img_size
         self.border_size = (self.img_size - self.inner_size) / 2
         self.multiview = dp_params['multiview_test'] and test
         self.num_views = 9
@@ -328,9 +328,9 @@ class MNISTDataProvider(CIFARDataProvider):
 class SVHNDataProvider(MNISTDataProvider):
     def __init__(self, data_dir, batch_range=None, init_epoch=1, init_batchnum=None, dp_params=None, test=False):
         LabeledDataProvider.__init__(self, data_dir, batch_range, init_epoch, init_batchnum, dp_params, test)
-        self.img_size = 32
-        self.num_colors = 3
-        self.inner_size = dp_params['inner_size'] if dp_params['inner_size'] > 0 else self.batch_meta['img_size']
+        self.img_size = int(self.batch_meta['img_size'])
+        self.num_colors = int(self.batch_meta['num_vis']) / self.img_size**2
+        self.inner_size =  dp_params['inner_size'] if dp_params['inner_size'] > 0 else self.img_size
         self.border_size = (self.img_size - self.inner_size) / 2
         self.multiview = dp_params['multiview_test'] and test
         self.num_views = 9
@@ -427,6 +427,6 @@ def test_svhn_data_provider():
 
 if __name__ == '__main__':
     # test_cifar10_data_provider()
-    test_cifar100_data_provider()
+    # test_cifar100_data_provider()
     # test_mnist_data_provider()
-    # test_svhn_data_provider()
+    test_svhn_data_provider()
