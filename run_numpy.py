@@ -16,7 +16,7 @@ rng = np.random.RandomState(9)
 def compute_layer(layer, inputs):
     assert isinstance(inputs, list)
     assert len(layer.get('inputs', [])) == len(inputs)
-    print "Computing layer %s" % layer['name']
+    print("Computing layer %s" % layer['name'])
 
     if layer['type'] == 'cost.logreg':
         assert len(inputs) == 2
@@ -67,6 +67,8 @@ def compute_layer(layer, inputs):
         sy = tt.nnet.softmax(sx)
         f = theano.function([sx], sy)
         return f(x)
+    if layer['type'] == 'dropout':
+        return layer['keep'] * x  # scale all outputs by dropout factor
 
     # layers that need square inputs
     assert x.shape[-2] == x.shape[-1]
@@ -98,8 +100,10 @@ def compute_layer(layer, inputs):
         y = f(x)
         # y += biases
 
-        print abs(filters).mean(), abs(filters).std(), abs(filters).max()
-        print abs(biases).mean(), abs(biases).std(), abs(biases).max()
+        print("Abs filters (mean, std, max) %s %s %s" % (
+            abs(filters).mean(), abs(filters).std(), abs(filters).max()))
+        print("Abs biases (mean, std, max) %s %s %s" % (
+            abs(biases).mean(), abs(biases).std(), abs(biases).max()))
 
         assert np.prod(y.shape[1:]) == layer['outputs']
         return y
@@ -243,7 +247,7 @@ if __name__ == '__main__':
         hist_dict = {}
         def hist_acts(name):
             output = output_dict[name]
-            hist, edges = np.histogram(output.ravel(), bins=30)
+            hist, edges = np.histogram(output.ravel(), bins=100)
             hist_dict[name] = (hist, edges)
 
             # compute parents
@@ -251,6 +255,6 @@ if __name__ == '__main__':
                 hist_acts(parent)
 
         hist_acts('probs')
-        print(hist_dict)
+        # print(hist_dict)
         np.savez(args.histsave, **hist_dict)
         print("Saved %r" % args.histsave)

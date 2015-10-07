@@ -33,9 +33,10 @@ def load_network(loadfile, multiview=None):
 
     epoch, batchnum, [images, labels] = dp.get_next_batch()
     images = images.T
-    images.shape = (images.shape[0], 3, 24, 24)
+    images.shape = (images.shape[0], dp.num_colors, dp.inner_size, dp.inner_size)
     labels.shape = (-1,)
     labels = labels.astype('int')
+    assert images.shape[0] == labels.shape[0]
 
     if 1:
         rng = np.random.RandomState(8)
