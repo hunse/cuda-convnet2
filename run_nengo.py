@@ -57,13 +57,30 @@ def build_layer(layer, inputs, data, hist=None):
 
         if hist is not None:
             # approximate function using NEF
+            f = lambda x: np.maximum(x, 0)
+            n_neurons = 5
             dist = hist_dist(*hist)
-            e = nengo.networks.EnsembleArray(
-                5, n, eval_points=dist, intercepts=dist)
-            nengo.Connection(input0, e.input)
+
+            if 0:
+                # tune parameters
+                e = nengo.Ensemble(n_neurons, 1, encoders=np.ones((n_neurons, 1)),
+                                   intercepts=dist, eval_points=dist)
+                nengo.utils.ensemble.tune_ens_parameters(e, function=f)
+
+                earray = nengo.networks.EnsembleArray(n_neurons, n)
+                for ei in earray.ensembles:
+                    ei.encoders = e.encoders
+                    ei.gain = e.gain
+                    ei.bias = e.bias
+                    ei.eval_points = ei.eval_points
+            else:
+                earray = nengo.networks.EnsembleArray(
+                    n_neurons, n, eval_points=dist, intercepts=dist)
+
+            nengo.Connection(input0, earray.input)
             if ntype == 'relu':
-                e.add_output('relu', lambda x: np.maximum(x, 0), synapse=None)
-                return e.relu
+                earray.add_output('relu', f, synapse=None)
+                return earray.relu
             raise NotImplementedError(ntype)
 
         e = nengo.Ensemble(n, 1)
@@ -102,6 +119,10 @@ def build_layer(layer, inputs, data, hist=None):
     if layer['type'] == 'softmax':
         # do nothing for now
         return input0
+    if layer['type'] == 'dropout':
+        u = nengo.Node(size_in=layer['outputs'])
+        nengo.Connection(input0, u, transform=layer['keep'])
+        return u
     if layer['type'] == 'fc':
         weights = layer['weights'][0]
         biases = layer['biases'].ravel()
