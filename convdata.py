@@ -209,7 +209,7 @@ class ImageDataProvider(LabeledDataProvider):
 class CIFARDataProvider(LabeledDataProvider):
     def __init__(self, data_dir, batch_range=None, init_epoch=1, init_batchnum=None, dp_params=None, test=False):
         LabeledDataProvider.__init__(self, data_dir, batch_range, init_epoch, init_batchnum, dp_params, test)
-        self.img_size = int(self.batch_meta['img_size'])
+        self.img_size = int(self.batch_meta.get('img_size', 32))
         self.num_colors = int(self.batch_meta['num_vis']) / self.img_size**2
         self.inner_size =  dp_params['inner_size'] if dp_params['inner_size'] > 0 else self.img_size
         self.border_size = (self.img_size - self.inner_size) / 2
