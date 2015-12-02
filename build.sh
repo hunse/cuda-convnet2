@@ -45,6 +45,10 @@ export LD_LIBRARY_PATH=$CUDA_INSTALL_PATH/lib64:$LD_LIBRARY_PATH
 export CUDA_SDK_PATH=$CUDA_INSTALL_PATH/samples
 export PATH=$PATH:$CUDA_INSTALL_PATH/bin
 
+GENCODE_SM35="-gencode arch=compute_35,code=sm_35"
+GENCODE_SM52="-gencode arch=compute_52,code=sm_52"
+export GENCODE_ARCH="$GENCODE_SM52"
+
 echo "--- util"
 cd util && make numpy=1 -j $* && cd ..
 echo "--- nvmatrix"

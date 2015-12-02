@@ -40,9 +40,6 @@ GCC             = g++
 AR				= ar
 
 # CUDA code generation flags
-GENCODE_SM35    := -gencode arch=compute_35,code=sm_35
-GENCODE_FLAGS   := $(GENCODE_SM35)
-
 LDFLAGS   := -L$(CUDA_LIB_PATH) -lcudart
 CCFLAGS   := -m64
 NVCCFLAGS := -m64 -w
