@@ -6,7 +6,8 @@ DATA=(
     --inner-size 24)
 # DATA+=(--color-noise 0.1)
 
-LAYERS=(--layer-def ./layers/layers-cifar100-avg.cfg)
+# LAYERS=(--layer-def ./layers/layers-cifar100-avg.cfg)
+LAYERS=(--layer-def ./layers/layers-cifar100-lif.cfg)
 # LAYERS=(--layer-def ./layers/cifar-100_def.cfg)
 
 LAYERS+=(--layer-params ./layers/layer-params-cifar10-11pct.cfg)
