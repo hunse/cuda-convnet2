@@ -204,9 +204,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     layers, data = load_network(args.loadfile)
 
-    # inds = slice(None)
-    # inds = slice(0, 20)
-    # inds = slice(0, 100)
     inds = slice(0, args.n)
     images = data['data'][inds]
     labels = data['labels'][inds]

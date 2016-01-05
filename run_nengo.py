@@ -1,16 +1,12 @@
-import logging
-logging.basicConfig(level=logging.INFO)
-import sys
-import os
-
 import matplotlib.pyplot as plt
 import numpy as np
 import nengo
+nengo.log(level='info')
 import nengo_ocl
 
 from run_core import load_network, SoftLIFRate
 
-presentation_time = 0.15
+presentation_time = 0.2
 get_ind = lambda t: int(t / presentation_time)
 
 
@@ -272,18 +268,20 @@ def run(loadfile, savefile=None, multiview=None, histload=None):
 
     # sim = nengo.Simulator(network)
     print("Creating simulator")
-    sim = nengo_ocl.Simulator(network)
-    # sim = nengo_ocl.Simulator(network, profiling=True)
-
-    print("Starting run")
-    # sim.run(0.005)
-    # sim.run(3 * presentation_time)
-    # sim.run(20 * presentation_time)
-    # sim.run(100 * presentation_time)
-    sim.run(1000 * presentation_time)
-    # sim.run(10000 * presentation_time)
-
-    # sim.print_profiling()
+    if 0:
+        # profile
+        sim = nengo_ocl.Simulator(network, profiling=True)
+        # sim.run(0.005)
+        sim.run(10 * presentation_time)
+        sim.print_profiling()
+    else:
+        sim = nengo_ocl.Simulator(network)
+        # sim.run(0.005)
+        # sim.run(3 * presentation_time)
+        # sim.run(20 * presentation_time)
+        # sim.run(100 * presentation_time)
+        # sim.run(1000 * presentation_time)
+        sim.run(10000 * presentation_time)
 
     dt = sim.dt
     t = sim.trange()
@@ -348,12 +346,14 @@ def view(dt, images, labels, data_mean, label_names, t, y, z):
     plt.subplot(rows, cols, 2)
     plt.plot(t, y)
     plt.xlim([t[0], t[-1]])
-    plt.legend(label_names, fontsize=8, loc=2)
+    if len(label_names) <= 10:
+        plt.legend(label_names, fontsize=8, loc=2)
 
     plt.subplot(rows, cols, 3)
     plt.plot(t, z)
     plt.xlim([t[0], t[-1]])
     plt.ylim([-0.1, 1.1])
+    plt.ylabel('error (0 == correct)')
 
     plt.show()
 
