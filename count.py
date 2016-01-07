@@ -35,6 +35,7 @@ def count_layer(layer, counts, hist=None):
         lcounts['n_neurons'] = layer['outputs']
         # basename = name.rstrip('_neurons')
         # counts.setdefault(basename, {})['n_neurons'] = layer['outputs']
+        lcounts['flops'] = lcounts['n_neurons']  # one flop per neuron if ReLU
         return
 
     if layer['type'] == 'softmax':
@@ -53,6 +54,7 @@ def count_layer(layer, counts, hist=None):
         lcounts['n_biases'] = layer['biases'].size
         lcounts['n_synapses'] = lcounts['n_weights']
         lcounts['n_full'] = lcounts['in_size'] * lcounts['out_size']
+        lcounts['flops'] = 2 * lcounts['n_synapses']
         return
 
     if layer['type'] == 'conv':
@@ -76,6 +78,7 @@ def count_layer(layer, counts, hist=None):
 
         lcounts['n_synapses'] = n**2 * c * s**2 * f
         lcounts['n_full'] = lcounts['in_size'] * lcounts['out_size']
+        lcounts['flops'] = 2 * lcounts['n_synapses']
         return
 
     if layer['type'] == 'local':
@@ -100,6 +103,7 @@ def count_layer(layer, counts, hist=None):
 
         lcounts['n_synapses'] = n**2 * c * s**2 * f
         lcounts['n_full'] = lcounts['in_size'] * lcounts['out_size']
+        lcounts['flops'] = 2 * lcounts['n_synapses']
         return
 
     if layer['type'] == 'pool':
@@ -116,6 +120,7 @@ def count_layer(layer, counts, hist=None):
         lcounts['in_shape'] = (c, nx, nx)
         lcounts['out_size'] = c * ny * ny
         lcounts['out_shape'] = (c, ny, ny)
+        lcounts['flops'] = lcounts['in_size']
         return
 
     raise NotImplementedError(layer['type'])
@@ -153,12 +158,11 @@ def count(loadfile, histfile=None):
     for key in layer_keys:
         print("%s:" % key)
         for k in sorted(counts[key]):
-            if k in ['depth']:
-                continue
-            print("  %s: %s" % (k, counts[key][k]))
+            if k not in ['depth']:
+                print("  %s: %s" % (k, counts[key][k]))
 
     print("totals:")
-    keys = ['n_weights', 'n_synapses', 'n_full', 'n_neurons']
+    keys = ['n_weights', 'n_synapses', 'n_full', 'n_neurons', 'flops']
     for key in keys:
         entries = [counts[lk][key] for lk in layer_keys if key in counts[lk]]
         print("  %s: %s -> %s" % (key, entries, sum(entries)))

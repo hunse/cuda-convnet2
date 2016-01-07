@@ -6,9 +6,6 @@ import nengo_ocl
 
 from run_core import load_network, SoftLIFRate
 
-presentation_time = 0.2
-get_ind = lambda t: int(t / presentation_time)
-
 
 def hist_dist(hist, edges):
     p = np.zeros(edges.size, dtype=float)
@@ -17,18 +14,19 @@ def hist_dist(hist, edges):
     return nengo.dists.PDF(edges, p)
 
 
-def build_layer(layer, inputs, data, hist=None):
+def build_layer(layer, inputs, data, hist=None, pt=None):
     assert isinstance(inputs, list)
     assert len(layer.get('inputs', [])) == len(inputs)
     name = layer['name']
 
     if layer['type'] == 'cost.logreg':
+        assert pt is not None
         labels, probs = inputs
         nlabels, nprobs = layer['numInputs']
         assert nlabels == 1
 
         def label_error(t, x, labels=labels):
-            return np.argmax(x) != labels[get_ind(t) % len(labels)]
+            return np.argmax(x) != labels[int(t / pt) % len(labels)]
 
         u = nengo.Node(label_error, size_in=nprobs)
         nengo.Connection(probs, u, synapse=None)
@@ -36,9 +34,10 @@ def build_layer(layer, inputs, data, hist=None):
 
     if layer['type'] == 'data':
         if name == 'data':
+            assert pt is not None
             images = data[name]
-            return nengo.Node(nengo.processes.PresentInput(
-                images.reshape(images.shape[0], -1), presentation_time))
+            images = images.reshape(images.shape[0], -1)
+            return nengo.Node(nengo.processes.PresentInput(images, pt))
         else:
             return data[name]  # just output the raw data
 
@@ -93,6 +92,7 @@ def build_layer(layer, inputs, data, hist=None):
         if ntype == 'softlif':
             params = neuron['params']
             if 't' not in params:
+                print("Warning: Using default neuron params")
                 tau_ref = 0.001
                 tau_rc = 0.05
                 alpha = 0.825
@@ -176,7 +176,7 @@ def build_layer(layer, inputs, data, hist=None):
     raise NotImplementedError(layer['type'])
 
 
-def build_target_layer(target_key, layers, data, network, outputs=None, hists=None):
+def build_target_layer(target_key, layers, data, network, outputs=None, hists=None, pt=None):
     if outputs is None:
         outputs = {}
     elif target_key in outputs:
@@ -186,58 +186,18 @@ def build_target_layer(target_key, layers, data, network, outputs=None, hists=No
     input_keys = layer.get('inputs', [])
     for input_key in input_keys:
         if input_key not in outputs:
-            build_target_layer(input_key, layers, data, network, outputs, hists=hists)
+            build_target_layer(input_key, layers, data, network, outputs, hists=hists, pt=pt)
 
     inputs = [outputs[key] for key in input_keys]
     with network:
         hist = hists[target_key] if target_key in hists else None
-        outputs[target_key] = build_layer(layer, inputs, data, hist=hist)
+        outputs[target_key] = build_layer(layer, inputs, data, hist=hist, pt=pt)
 
     return outputs
 
 
-def run_layer(loadfile):
-    from run_numpy import compute_target_layer
-    from nengo.utils.numpy import rms
-
-    layers, data = load_network(loadfile)
-
-    network = nengo.Network()
-    network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
-
-    outputs = build_target_layer('logprob', layers, data, network)
-
-    # test a particular layer
-    key = 'conv1'
-
-    with network:
-        yp = nengo.Probe(outputs[key])
-
-    sim = nengo.Simulator(network)
-    sim.run(0.01)
-
-    outputs = {}
-    outputs['data'] = images[:1]
-    outputs['labels'] = labels[:1]
-    compute_target_layer(layers, key, outputs)
-    yref = outputs[key][0]
-    y = sim.data[yp][-1].reshape(yref.shape)
-
-    plt.figure()
-    plt.subplot(121)
-    plt.imshow(yref[0])
-    plt.colorbar()
-    plt.subplot(122)
-    plt.imshow(y[0])
-    plt.colorbar()
-    plt.show()
-
-    print rms(y - yref)
-
-    assert np.allclose(yref, y)
-
-
-def run(loadfile, savefile=None, multiview=None, histload=None):
+def run(loadfile, savefile=None, multiview=None, histload=None,
+        count_spikes=False):
     assert not multiview
 
     print("Creating network")
@@ -247,24 +207,35 @@ def run(loadfile, savefile=None, multiview=None, histload=None):
 
     # --- build network in Nengo
     network = nengo.Network()
+
+    # presentation_time = 0.03
+    # presentation_time = 0.04
+    # presentation_time = 0.05
+    # presentation_time = 0.15
+    presentation_time = 0.2
+
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.001)
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.005)
+    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.001)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.003)
     network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
 
-    outputs = build_target_layer('logprob', layers, data, network, hists=hists)
+    outputs = build_target_layer('logprob', layers, data, network, hists=hists,
+                                 pt=presentation_time)
 
     # test whole network
     with network:
         # xp = nengo.Probe(outputs['data'], synapse=None)
         yp = nengo.Probe(outputs['fc10'], synapse=None)
         zp = nengo.Probe(outputs['logprob'], synapse=None)
-        # spikes_p = {}
-        # for name in layers:
-        #     if layers[name]['type'] == 'neuron':
-        #         # node outputs scaled spikes
-        #         spikes_p[name] = nengo.Probe(outputs[name])
+
+        if count_spikes:
+            spikes_p = {}
+            for name in layers:
+                if layers[name]['type'] == 'neuron':
+                    # node outputs scaled spikes
+                    spikes_p[name] = nengo.Probe(outputs[name])
 
     # sim = nengo.Simulator(network)
     print("Creating simulator")
@@ -277,18 +248,18 @@ def run(loadfile, savefile=None, multiview=None, histload=None):
     else:
         sim = nengo_ocl.Simulator(network)
         # sim.run(0.005)
-        # sim.run(3 * presentation_time)
+        sim.run(3 * presentation_time)
         # sim.run(20 * presentation_time)
         # sim.run(100 * presentation_time)
         # sim.run(1000 * presentation_time)
-        sim.run(10000 * presentation_time)
+        # sim.run(10000 * presentation_time)
 
     dt = sim.dt
     t = sim.trange()
     y = sim.data[yp]
     z = sim.data[zp]
-    # spikes = {k: sim.data[v] for k, v in spikes_p.items()}
 
+    get_ind = lambda t: int(t / presentation_time)
     inds = slice(0, get_ind(t[-2]) + 1)
     # inds = slice(0, get_ind(t[-1]) + 1)
     images = data['data'][inds]
@@ -297,40 +268,60 @@ def run(loadfile, savefile=None, multiview=None, histload=None):
     label_names = data['label_names']
 
     # view(dt, images, labels, data_mean, label_names, t, y, z)
-    errors, y, z = error(dt, labels, t, y, z)
-    print "Error: %f (%d samples)" % (errors.mean(), errors.size)
+    errors, y, z = error(dt, presentation_time, labels, t, y, z)
+    print("Error: %f (%d samples)" % (errors.mean(), errors.size))
+
+    spikes = None
+    if count_spikes:
+        trange = float(t[-1] - t[0])
+        spikes = {k: sim.data[v] for k, v in spikes_p.items()}
+        counts = [(v > 0).sum() / trange for v in spikes.values()]
+        neurons = [v.shape[1] for v in spikes.values()]
+        rates = [c / n for c, n in zip(counts, neurons)]
+        print("Spike rates: {%s}" % ', '.join(
+            "%s: %0.1f" % (k, r) for k, r in zip(spikes.keys(), rates)))
+        print("Spike rate [Hz]: %0.3f" % (sum(counts) / sum(neurons)))
 
     if savefile is not None:
         np.savez(savefile,
                  images=images, labels=labels,
                  data_mean=data_mean, label_names=label_names,
-                 dt=dt, t=t, y=y, z=z)
-                 # dt=dt, t=t, y=y, z=z, spikes=spikes)
+                 dt=dt, pt=presentation_time, t=t, y=y, z=z, spikes=spikes)
         print("Saved '%s'" % savefile)
 
 
-def error(dt, labels, t, y, z):
-    s = nengo.synapses.Alpha(0.01)
-    y = nengo.synapses.filtfilt(y, s, dt)
+def error(dt, pt, labels, t, y, z):
+    # s = nengo.synapses.Alpha(0.01)
+    # y = nengo.synapses.filtfilt(y, s, dt)
 
     if 0:
         z = nengo.synapses.filtfilt(z, s, dt)
     else:
-        lt = labels[(t / presentation_time).astype(int) % len(labels)]
+        lt = labels[(t / pt).astype(int) % len(labels)]
         z = (np.argmax(y, axis=1) != lt)
 
     # take 10 ms at end of each presentation
-    blocks = z.reshape(-1, int(presentation_time / dt))[:, -10:]
+    blocks = z.reshape(-1, int(pt / dt))[:, -10:]
     errors = blocks.mean(1) > 0.4
     return errors, y, z
 
 
-def view(dt, images, labels, data_mean, label_names, t, y, z):
+def view(dt, pt, images, labels, data_mean, label_names, t, y, z, n_max=30):
+
+    get_ind = lambda t: int(t / pt)
+
+    # clip if more than n_max
+    i_max = int(n_max * pt / dt)
+    t = t[:i_max]
+    y = y[:i_max]
+    z = z[:i_max]
 
     # plot
     plt.figure()
     c, m, n = images.shape[1:]
     inds = slice(0, get_ind(t[-2]) + 1)
+
+
     imgs = images[inds]
     allimage = np.zeros((c, m, n * len(imgs)))
     for i, img in enumerate(imgs):
@@ -368,6 +359,8 @@ if __name__ == '__main__':
     parser.add_argument('loadfile', help="Checkpoint to load")
     parser.add_argument('savefile', nargs='?', default=None, help="Where to save output")
     parser.add_argument('--histload', help="Layer histograms created by run_numpy")
+    parser.add_argument('--spikes', action='store_true', help="Count spikes")
 
     args = parser.parse_args()
-    run(args.loadfile, args.savefile, histload=args.histload)
+    run(args.loadfile, args.savefile, histload=args.histload,
+        count_spikes=args.spikes)
