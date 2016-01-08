@@ -6,13 +6,14 @@ DATA=(--data-path ~/data/cifar-10-py-colmajor/
 
 # LAYERS=(--layer-def ./layers/layers-cifar10-11pct.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-max.cfg)
-# LAYERS=(--layer-def ./layers/layers-cifar10-avg.cfg)
+LAYERS=(--layer-def ./layers/layers-cifar10-relu.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-dropout.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-logavg.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-lifavg.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-hinge.cfg)
-LAYERS=(--layer-def ./layers/layers-cifar10-lifnoise.cfg)
+# LAYERS=(--layer-def ./layers/layers-cifar10-lifnoise.cfg)
 # LAYERS=(--layer-def ./layers/layers-cifar10-lifnoise2.cfg)
+# LAYERS=(--layer-def ./layers/layers-cifar10-lif-sparse.cfg)
 
 LAYERS+=(--layer-params ./layers/layer-params-cifar10-11pct.cfg)
 # LAYERS+=(--layer-params ./layers/layer-params-cifar10-lifnoise2.cfg)
