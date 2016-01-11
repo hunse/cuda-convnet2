@@ -200,8 +200,6 @@ def run(loadfile, savefile=None, multiview=None, histload=None,
         count_spikes=False):
     assert not multiview
 
-    print("Creating network")
-
     layers, data = load_network(loadfile, multiview)
     hists = np.load(histload) if histload is not None else {}
 
@@ -211,8 +209,8 @@ def run(loadfile, savefile=None, multiview=None, histload=None,
     # presentation_time = 0.03
     # presentation_time = 0.04
     # presentation_time = 0.05
-    # presentation_time = 0.15
-    presentation_time = 0.2
+    presentation_time = 0.15
+    # presentation_time = 0.2
 
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.001)
@@ -237,8 +235,6 @@ def run(loadfile, savefile=None, multiview=None, histload=None,
                     # node outputs scaled spikes
                     spikes_p[name] = nengo.Probe(outputs[name])
 
-    # sim = nengo.Simulator(network)
-    print("Creating simulator")
     if 0:
         # profile
         sim = nengo_ocl.Simulator(network, profiling=True)
@@ -246,13 +242,14 @@ def run(loadfile, savefile=None, multiview=None, histload=None,
         sim.run(10 * presentation_time)
         sim.print_profiling()
     else:
+        # n = 3
+        # n = 20
+        # n = 100
+        n = data['labels'].size  # test on all examples
+
+        print("Running %d examples for %0.3f s each" % (n, presentation_time))
         sim = nengo_ocl.Simulator(network)
-        # sim.run(0.005)
-        sim.run(3 * presentation_time)
-        # sim.run(20 * presentation_time)
-        # sim.run(100 * presentation_time)
-        # sim.run(1000 * presentation_time)
-        # sim.run(10000 * presentation_time)
+        sim.run(n * presentation_time)
 
     dt = sim.dt
     t = sim.trange()
@@ -261,15 +258,10 @@ def run(loadfile, savefile=None, multiview=None, histload=None,
 
     get_ind = lambda t: int(t / presentation_time)
     inds = slice(0, get_ind(t[-2]) + 1)
-    # inds = slice(0, get_ind(t[-1]) + 1)
     images = data['data'][inds]
     labels = data['labels'][inds]
     data_mean = data['data_mean']
     label_names = data['label_names']
-
-    # view(dt, images, labels, data_mean, label_names, t, y, z)
-    errors, y, z = error(dt, presentation_time, labels, t, y, z)
-    print("Error: %f (%d samples)" % (errors.mean(), errors.size))
 
     spikes = None
     if count_spikes:
@@ -289,20 +281,24 @@ def run(loadfile, savefile=None, multiview=None, histload=None,
                  dt=dt, pt=presentation_time, t=t, y=y, z=z, spikes=spikes)
         print("Saved '%s'" % savefile)
 
+    # view(dt, images, labels, data_mean, label_names, t, y, z)
+    errors, _, _ = error(dt, presentation_time, labels, t, y, z)
+    print("Error: %f (%d samples)" % (errors.mean(), errors.size))
+
 
 def error(dt, pt, labels, t, y, z):
-    # s = nengo.synapses.Alpha(0.01)
+    # filter outputs (better accuracy)
+    s = nengo.synapses.Alpha(0.01)
+    y = nengo.synapses.filt(y, s, dt)
     # y = nengo.synapses.filtfilt(y, s, dt)
 
-    if 0:
-        z = nengo.synapses.filtfilt(z, s, dt)
-    else:
-        lt = labels[(t / pt).astype(int) % len(labels)]
-        z = (np.argmax(y, axis=1) != lt)
-
-    # take 10 ms at end of each presentation
-    blocks = z.reshape(-1, int(pt / dt))[:, -10:]
-    errors = blocks.mean(1) > 0.4
+    # take average class over last 10 ms of each presentation
+    pn = int(pt / dt)
+    n = y.shape[0] / pn
+    blocks = y.reshape(n, pn, y.shape[1])[:, -10:, :]
+    labels = labels[:n]
+    assert blocks.shape[0] == labels.shape[0]
+    errors = np.argmax(blocks.mean(1), axis=1) != labels
     return errors, y, z
 
 

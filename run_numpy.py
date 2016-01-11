@@ -45,6 +45,7 @@ def compute_layer(layer, inputs):
         if ntype == 'softlif':
             params = neuron['params']
             if 't' not in params:
+                print("WARNING: using default neuron params")
                 tau_ref = 0.001
                 tau_rc = 0.05
                 alpha = 0.825

@@ -17,9 +17,8 @@ OPTS=(--save-path ./checkpoints
       --gpu 0
       --test-freq 25)
 
-# EPOCHS=(100 140 150 160)  # 13% error
-# EPOCHS=(200 280 300 320)
-EPOCHS=(350 500 510 520)  # should be 11% error
+# EPOCHS=(100 140 150 160)
+EPOCHS=(350 500 510 520)
 
 
 if [[ $1 == "" ]];
