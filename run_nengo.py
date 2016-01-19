@@ -4,7 +4,7 @@ import nengo
 nengo.log(level='info')
 import nengo_ocl
 
-from run_core import load_network, SoftLIFRate
+from run_core import load_network, SoftLIFRate, round_layer
 
 
 def hist_dist(hist, edges):
@@ -203,21 +203,32 @@ def run(loadfile, savefile=None, multiview=None, histload=None,
     layers, data = load_network(loadfile, multiview)
     hists = np.load(histload) if histload is not None else {}
 
+    if 0:
+        # use fixed point weights
+        for layer in layers.values():
+            round_layer(layer, 2**8, clip_percent=0)
+
     # --- build network in Nengo
     network = nengo.Network()
 
+    # presentation_time = 0.02
     # presentation_time = 0.03
     # presentation_time = 0.04
     # presentation_time = 0.05
-    presentation_time = 0.15
+    presentation_time = 0.08
+    # presentation_time = 0.1
+    # presentation_time = 0.13
+    # presentation_time = 0.15
     # presentation_time = 0.2
 
-    # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
+    network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.001)
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.005)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.001)
+    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.002)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.003)
-    network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
+    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.004)
+    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
 
     outputs = build_target_layer('logprob', layers, data, network, hists=hists,
                                  pt=presentation_time)
@@ -245,6 +256,7 @@ def run(loadfile, savefile=None, multiview=None, histload=None,
         # n = 3
         # n = 20
         # n = 100
+        # n = 1000
         n = data['labels'].size  # test on all examples
 
         print("Running %d examples for %0.3f s each" % (n, presentation_time))
@@ -288,14 +300,24 @@ def run(loadfile, savefile=None, multiview=None, histload=None,
 
 def error(dt, pt, labels, t, y, z):
     # filter outputs (better accuracy)
+    # s = nengo.synapses.Alpha(0.002)  # 30ms_pt-0ms_alpha
+    # s = nengo.synapses.Alpha(0.004)
+    # s = nengo.synapses.Alpha(0.005)
     s = nengo.synapses.Alpha(0.01)
+    # s = nengo.synapses.Alpha(0.02)
     y = nengo.synapses.filt(y, s, dt)
     # y = nengo.synapses.filtfilt(y, s, dt)
 
+    # ct = 0.01  # classification time
+    ct = 0.04  # classification time
+
     # take average class over last 10 ms of each presentation
     pn = int(pt / dt)
+    cn = int(ct / dt)
     n = y.shape[0] / pn
-    blocks = y.reshape(n, pn, y.shape[1])[:, -10:, :]
+    assert cn <= pn
+
+    blocks = y.reshape(n, pn, y.shape[1])[:, -cn:, :]
     labels = labels[:n]
     assert blocks.shape[0] == labels.shape[0]
     errors = np.argmax(blocks.mean(1), axis=1) != labels

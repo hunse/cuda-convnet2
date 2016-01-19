@@ -8,7 +8,7 @@ import theano.tensor as tt
 # dtype = theano.config.floatX
 
 # from convnet import ConvNet
-from run_core import load_network, SoftLIFRate
+from run_core import load_network, SoftLIFRate, round_layer
 
 rng = np.random.RandomState(9)
 
@@ -204,6 +204,11 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     layers, data = load_network(args.loadfile)
+
+    if 0:
+        # use fixed point weights
+        for layer in layers.values():
+            round_layer(layer, 2**8, clip_percent=0.1)
 
     inds = slice(0, args.n)
     images = data['data'][inds]

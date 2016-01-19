@@ -53,6 +53,30 @@ def load_network(loadfile, multiview=None):
     return layers, data
 
 
+def round_array(x, n_values, x_min, x_max):
+    if x_min == x_max:
+        return
+
+    assert x_min < x_max
+    np.clip(x, x_min, x_max, out=x)
+    scale = float(n_values - 1) / (x_max - x_min)
+    x[:] = np.round(x * scale) / scale
+
+
+def round_layer(layer, n_values, clip_percent=0):
+    if 'weights' in layer:
+        for weights in layer['weights']:
+            w_min = np.percentile(weights.ravel(), clip_percent)
+            w_max = np.percentile(weights.ravel(), 100 - clip_percent)
+            round_array(weights, n_values, w_min, w_max)
+
+    if 'biases' in layer:
+        for biases in layer['biases']:
+            b_min = biases.min()
+            b_max = biases.max()
+            round_array(biases, n_values, b_min, b_max)
+
+
 def softrelu(x, sigma=1.):
     y = x / sigma
     z = np.array(x)
