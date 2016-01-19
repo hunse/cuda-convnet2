@@ -329,7 +329,7 @@ def make_svhn():
 
 
 if __name__ == "__main__":
-    # make_ilsvrc()
+    make_ilsvrc()
     # make_cifar100()
     # make_mnist()
-    make_svhn()
+    # make_svhn()
