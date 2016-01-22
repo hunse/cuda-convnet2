@@ -45,7 +45,7 @@ class JPEGBatchLoaderThread(Thread):
 
         img_mat = n.empty((nc_total * dp.data_mult, dp.inner_pixels * dp.num_colors), dtype=n.float32)
         lab_mat = n.zeros((nc_total, dp.get_num_classes()), dtype=n.float32)
-        dp.convnet.libmodel.decodeJpeg(jpeg_strs, img_mat, dp.img_size, dp.inner_size, dp.test, dp.multiview)
+        dp.libmodel.decodeJpeg(jpeg_strs, img_mat, dp.img_size, dp.inner_size, dp.test, dp.multiview)
         lab_vec = n.tile(n.asarray([(l[nr.randint(len(l))] if len(l) > 0 else -1) + label_offset for l in labels], dtype=n.single).reshape((nc_total, 1)), (dp.data_mult,1))
         for c in xrange(nc_total):
             lab_mat[c, [z + label_offset for z in labels[c]]] = 1
@@ -97,7 +97,7 @@ class ImageDataProvider(LabeledDataProvider):
         self.data = [None, None] # These are pointers to previously-returned data matrices
 
         self.loader_thread, self.color_noise_thread = None, None
-        self.convnet = dp_params['convnet']
+        self.libmodel = dp_params['libmodel']
 
         self.num_noise = self.batch_size
         self.batches_generated, self.loaders_started = 0, 0

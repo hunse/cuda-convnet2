@@ -18,6 +18,11 @@ def load_network(loadfile, multiview=None):
     for v in ('color_noise', 'multiview_test', 'inner_size', 'scalar_mean', 'minibatch_size'):
         dp_params[v] = options[v]
 
+    lib_name = "cudaconvnet._ConvNet"
+    print("Importing %s C++ module" % lib_name)
+    libmodel = __import__(lib_name,fromlist=['_ConvNet'])
+    dp_params['libmodel'] = libmodel
+
     if multiview is not None:
         dp_params['multiview_test'] = multiview
 
@@ -31,7 +36,8 @@ def load_network(loadfile, multiview=None):
         type=options['dp_type'],
         dp_params=dp_params, test=True)
 
-    epoch, batchnum, [images, labels] = dp.get_next_batch()
+    epoch, batchnum, data = dp.get_next_batch()
+    images, labels = data[:2]
     images = images.T
     images.shape = (images.shape[0], dp.num_colors, dp.inner_size, dp.inner_size)
     labels.shape = (-1,)
@@ -44,13 +50,11 @@ def load_network(loadfile, multiview=None):
         images = images[i]
         labels = labels[i]
 
-    data = {}
-    data['data'] = images
-    data['labels'] = labels
-    data['data_mean'] = dp.data_mean
-    data['label_names'] = dp.batch_meta['label_names']
+    data = [images, labels] + list(data[2:])
+    # data['data_mean'] = dp.data_mean
+    # data['label_names'] = dp.batch_meta['label_names']
 
-    return layers, data
+    return layers, data, dp
 
 
 def round_array(x, n_values, x_min, x_max):

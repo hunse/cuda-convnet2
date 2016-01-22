@@ -83,6 +83,8 @@ class IGPUModel:
             self.model_state["batchnum"] = self.train_batch_range[0]
 #            print self.save_file
 
+        self.import_model()
+
         self.init_data_providers()
         if load_dic:
             self.train_data_provider.advance_batch()
@@ -96,7 +98,6 @@ class IGPUModel:
         for var, val in self.model_state.iteritems():
             setattr(self, var, val)
 
-        self.import_model()
         self.init_model_lib()
 
     def import_model(self):
@@ -108,7 +109,7 @@ class IGPUModel:
         pass
 
     def init_data_providers(self):
-        self.dp_params['convnet'] = self
+        self.dp_params['libmodel'] = self.libmodel
         try:
             self.test_data_provider = DataProvider.get_instance(self.data_path, self.test_batch_range,
                                                                 type=self.dp_type, dp_params=self.dp_params, test=True)

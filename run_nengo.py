@@ -230,8 +230,8 @@ def run(loadfile, savefile=None, multiview=None, histload=None,
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.004)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
 
-    outputs = build_target_layer('logprob', layers, data, network, hists=hists,
-                                 pt=presentation_time)
+    outputs = build_target_layer(
+        'logprob', layers, data, network, hists=hists, pt=presentation_time)
 
     # test whole network
     with network:

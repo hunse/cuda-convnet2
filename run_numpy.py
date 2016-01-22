@@ -13,10 +13,13 @@ from run_core import load_network, SoftLIFRate, round_layer
 rng = np.random.RandomState(9)
 
 
-def compute_layer(layer, inputs):
+def compute_layer(layer, inputs, data):
     assert isinstance(inputs, list)
     assert len(layer.get('inputs', [])) == len(inputs)
     print("Computing layer %s" % layer['name'])
+
+    if layer['type'] == 'data':
+        return data[layer['dataIdx']]
 
     if layer['type'] == 'cost.logreg':
         assert len(inputs) == 2
@@ -68,7 +71,7 @@ def compute_layer(layer, inputs):
         sy = tt.nnet.softmax(sx)
         f = theano.function([sx], sy)
         return f(x)
-    if layer['type'] == 'dropout':
+    if layer['type'] in ['dropout', 'dropout2']:
         return layer['keep'] * x  # scale all outputs by dropout factor
 
     # layers that need square inputs
@@ -76,37 +79,42 @@ def compute_layer(layer, inputs):
 
     if layer['type'] == 'conv':
         assert layer['sharedBiases']
-        assert layer['stride'][0] == 1
 
-        c = layer['channels'][0]
-        f = layer['filters']
+        n = x.shape[0]
+        nc = layer['channels'][0]
+        nx = layer['imgSize'][0]
+        ny = layer['modulesX']
+        nf = layer['filters']
         s = layer['filterSize'][0]
-        assert x.shape[1] == c
+        st = layer['stride'][0]
+        p = -layer['padding'][0]  # Alex makes -ve in layer.py (why?)
+        assert x.shape[1:] == (nc, nx, nx)
 
-        filters = layer['weights'][0].reshape(c, s, s, f)
+        nx2 = (ny - 1) * st + s
+        xpad = np.zeros((n, nc, nx2, nx2), dtype=x.dtype)
+        xpad[:, :, p:p+nx, p:p+nx] = x
+        x = xpad
+
+        filters = layer['weights'][0].reshape(nc, s, s, nf)
         filters = np.rollaxis(filters, axis=-1, start=0)
-        filters = filters[:, :, ::-1, ::-1]  # flip
-        biases = layer['biases'].reshape(1, f, 1, 1)
+        filters = filters[:, :, ::-1, ::-1]  # flip, since conv2d flips back
+        biases = layer['biases'].reshape(1, nf, 1, 1)
 
         sx = tt.tensor4()
         sy = tt.nnet.conv2d(
             sx, filters, image_shape=x.shape, filter_shape=filters.shape,
-            border_mode='full')  # flips the kernel (performs actual conv)
-
-        p = (s - 1) / 2
-        sy = sy[:, :, p:-p, p:-p]
+            subsample=(st, st), border_mode='valid')
         sy = sy + biases
-
         f = theano.function([sx], sy)
+
         y = f(x)
-        # y += biases
 
         print("Abs filters (mean, std, max) %s %s %s" % (
             abs(filters).mean(), abs(filters).std(), abs(filters).max()))
         print("Abs biases (mean, std, max) %s %s %s" % (
             abs(biases).mean(), abs(biases).std(), abs(biases).max()))
 
-        assert np.prod(y.shape[1:]) == layer['outputs']
+        assert y.shape[1:] == (nf, ny, ny)
         return y
     if layer['type'] == 'local':
         st = layer['stride'][0]
@@ -140,27 +148,33 @@ def compute_layer(layer, inputs):
         assert x.shape[-2] == x.shape[-1]
         assert layer['start'] == 0
         pool = layer['pool']
-        st, s = layer['stride'], layer['sizeX']
-        nx = x.shape[-1]
+        n = x.shape[0]
+        nc = layer['channels']
+        nx = layer['imgSize']
         ny = layer['outputsX']
+        st, s = layer['stride'], layer['sizeX']
+        assert x.shape == (n, nc, nx, nx)
 
-        y = x[:, :, ::st, ::st].copy()
+        nx2 = ny * st
+        y = x[:, :, 0:nx2:st, 0:nx2:st].copy()
         c = np.ones((ny, ny))
-        assert y.shape[-2] == y.shape[-1] and y.shape[-1] == ny
+        assert y.shape == (n, nc, ny, ny)
 
         for i in range(0, s):
             for j in range(0, s):
                 if i == 0 and j == 0:
                     continue
 
-                ni = (nx - i - 1) / st + 1
-                nj = (nx - j - 1) / st + 1
-                xij, yij = x[:, :, i::st, j::st], y[:, :, :ni, :nj]
+                nxi = min(nx2 + i, nx)
+                nxj = min(nx2 + j, nx)
+                nyi = (nx - i - 1) / st + 1
+                nyj = (nx - j - 1) / st + 1
+                xij, yij = x[:, :, i:nxi:st, j:nxj:st], y[:, :, :nyi, :nyj]
                 if pool == 'max':
                     yij[...] = np.maximum(yij, xij)
                 elif pool == 'avg':
                     yij += xij
-                    c[:ni, :nj] += 1
+                    c[:nyi, :nyj] += 1
                 else:
                     raise NotImplementedError(pool)
 
@@ -172,27 +186,22 @@ def compute_layer(layer, inputs):
     raise NotImplementedError(layer['type'])
 
 
-def compute_target_layer(layers, target_key, output_dict):
-    if target_key in output_dict:
+def compute_target_layer(target_key, layers, data, outputs=None):
+    if outputs is None:
+        outputs = {}
+    if target_key in outputs:
         return
 
     layer = layers[target_key]
-    if layer['type'] == 'data':
-        raise ValueError("Put data layers into 'output_dict' first")
-
-    input_keys = layer['inputs']
+    input_keys = layer.get('inputs', [])
     for input_key in input_keys:
-        if input_key not in output_dict:
-            compute_target_layer(layers, input_key, output_dict)
+        if input_key not in outputs:
+            compute_target_layer(input_key, layers, data, outputs)
 
-    inputs = [output_dict[key] for key in input_keys]
-    output_dict[target_key] = compute_layer(layer, inputs)
+    inputs = [outputs[key] for key in input_keys]
+    outputs[target_key] = compute_layer(layer, inputs, data)
 
-
-def compute_layers(layers, output_dict):
-    for key in layers:
-        if key not in output_dict:
-            compute_target_layer(layers, key, output_dict)
+    return outputs
 
 
 if __name__ == '__main__':
@@ -203,7 +212,7 @@ if __name__ == '__main__':
     parser.add_argument('--n', type=int, help="Number of images to test")
 
     args = parser.parse_args()
-    layers, data = load_network(args.loadfile)
+    layers, data, dp = load_network(args.loadfile)
 
     if 0:
         # use fixed point weights
@@ -211,13 +220,13 @@ if __name__ == '__main__':
             round_layer(layer, 2**8, clip_percent=0.1)
 
     inds = slice(0, args.n)
-    images = data['data'][inds]
-    labels = data['labels'][inds]
+    data = [d[inds] for d in data]
 
     if 0:
         n = 10
+        images = data[0]
         pimages = images[:n]
-        pimages = (pimages + data['data_mean'].reshape(1, 3, 24, 24)) / 255.
+        pimages = (pimages + dp.data_mean.reshape(1, 3, 24, 24)) / 255.
         pimages = np.transpose(pimages, (0, 2, 3, 1))
         pimages = pimages.clip(0, 1)
 
@@ -230,26 +239,23 @@ if __name__ == '__main__':
 
         plt.show()
 
-    output_dict = {}
-    output_dict['data'] = images
-    output_dict['labels'] = labels
-    compute_layers(layers, output_dict)
+    outputs = compute_target_layer('logprob', layers, data)
 
     def print_acts(name):
         for parent in layers[name].get('inputs', []):
             print_acts(parent)
 
-        output = output_dict[name]
+        output = outputs[name]
         print("%15s: %10f %10f [%10f %10f]" % (
             name, output.mean(), output.std(), output.min(), output.max()))
 
     print_acts('probs')
-    print(output_dict['logprob'])
+    print(outputs['logprob'])
 
     if args.histsave is not None:
         hist_dict = {}
         def hist_acts(name):
-            output = output_dict[name]
+            output = outputs[name]
             hist, edges = np.histogram(output.ravel(), bins=100)
             hist_dict[name] = (hist, edges)
 
