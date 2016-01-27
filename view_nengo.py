@@ -19,8 +19,10 @@ kwargs = {}
 for n in ['dt', 'pt', 'images', 'labels', 'data_mean', 'label_names', 't', 'y', 'z']:
     kwargs[n] = objs[n]
 
-errors, y, z = error(*[kwargs[n] for n in ('dt', 'pt', 'labels', 't', 'y', 'z')])
-print("Error: %f (%d samples)" % (errors.mean(), errors.size))
+errors, top5errors, y, z = error(
+    *[kwargs[n] for n in ('dt', 'pt', 'labels', 't', 'y', 'z')])
+print("Error: %0.4f, %0.4f (%d samples)"
+      % (errors.mean(), top5errors.mean(), errors.size))
 kwargs['y'] = y
 kwargs['z'] = z
 

@@ -28,18 +28,19 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
         def label_error(t, x, labels=labels):
             return np.argmax(x) != labels[int(t / pt) % len(labels)]
 
-        u = nengo.Node(label_error, size_in=nprobs)
+        u = nengo.Node(label_error, size_in=nprobs, label=name)
         nengo.Connection(probs, u, synapse=None)
         return u
 
     if layer['type'] == 'data':
-        if name == 'data':
+        if layer['dataIdx'] == 0:
             assert pt is not None
-            images = data[name]
+            images = data[0]
             images = images.reshape(images.shape[0], -1)
-            return nengo.Node(nengo.processes.PresentInput(images, pt))
+            return nengo.Node(nengo.processes.PresentInput(images, pt),
+                              label=name)
         else:
-            return data[name]  # just output the raw data
+            return data[layer['dataIdx']]  # just output the raw data
 
     # single input layers
     assert len(inputs) == 1
@@ -78,7 +79,7 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
                 return earray.relu
             raise NotImplementedError(ntype)
 
-        e = nengo.Ensemble(n, 1)
+        e = nengo.Ensemble(n, 1, label='%s_neurons' % name)
         nengo.Connection(input0, e.neurons)
 
         if ntype == 'ident':
@@ -108,14 +109,14 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
             e.neuron_type = nengo.LIF(tau_rc=tau_rc, tau_ref=tau_ref)
             e.gain = alpha * np.ones(n)
             e.bias = 1. * np.ones(n)
-            u = nengo.Node(size_in=n)
+            u = nengo.Node(size_in=n, label=name)
             nengo.Connection(e.neurons, u, transform=amp, synapse=None)
             return u
         raise NotImplementedError(ntype)
     if layer['type'] == 'softmax':
         # do nothing for now
         return input0
-    if layer['type'] == 'dropout':
+    if layer['type'] in ['dropout', 'dropout2']:
         u = nengo.Node(size_in=layer['outputs'])
         nengo.Connection(input0, u, transform=layer['keep'])
         return u
@@ -129,35 +130,36 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
         return u
     if layer['type'] == 'conv':
         assert layer['sharedBiases']
-        assert layer['stride'][0] == 1
 
-        c = layer['channels'][0]
-        f = layer['filters']
+        nc = layer['channels'][0]
+        nx = layer['imgSize'][0]
+        ny = layer['modulesX']
+        nf = layer['filters']
         s = layer['filterSize'][0]
-        n = int(np.sqrt(layer['numInputs'][0] / c))
-        assert n == layer['modulesX']
+        st = layer['stride'][0]
+        p = -layer['padding'][0]  # Alex makes -ve in layer.py (why?)
 
-        filters = layer['weights'][0].reshape(c, s, s, f)
+        filters = layer['weights'][0].reshape(nc, s, s, nf)
         filters = np.rollaxis(filters, axis=-1, start=0)
         biases = layer['biases']
-        u = nengo.Node(nengo.processes.Conv2((c, n, n), filters, biases))
+        u = nengo.Node(nengo.processes.Conv2d(
+            (nc, nx, nx), filters, biases, stride=st, padding=p), label=name)
         nengo.Connection(input0, u)
         return u
     if layer['type'] == 'local':
-        st = layer['stride'][0]
-        assert st == 1
-
-        c = layer['channels'][0]
-        f = layer['filters']
+        nc = layer['channels'][0]
+        nx = layer['imgSize'][0]
+        ny = layer['modulesX']
+        nf = layer['filters']
         s = layer['filterSize'][0]
-        s2 = (s - 1) / 2
-        n = int(np.sqrt(layer['numInputs'][0] / c))
-        assert n == layer['modulesX']
+        st = layer['stride'][0]
+        p = -layer['padding'][0]  # Alex makes -ve in layer.py (why?)
 
-        filters = layer['weights'][0].reshape(n, n, c, s, s, f)
+        filters = layer['weights'][0].reshape(ny, ny, nc, s, s, nf)
         filters = np.rollaxis(filters, axis=-1, start=0)
         biases = layer['biases'][0].reshape(1, 1, 1)
-        u = nengo.Node(nengo.processes.Conv2((c, n, n), filters, biases))
+        u = nengo.Node(nengo.processes.Conv2d(
+            (nc, nx, nx), filters, biases, stride=st, padding=p), label=name)
         nengo.Connection(input0, u)
         return u
     if layer['type'] == 'pool':
@@ -169,7 +171,8 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
         c = layer['channels']
         nx = layer['imgSize']
 
-        u = nengo.Node(nengo.processes.Pool2((c, nx, nx), s, stride=st))
+        u = nengo.Node(nengo.processes.Pool2d(
+            (c, nx, nx), s, stride=st), label=name)
         nengo.Connection(input0, u, synapse=None)
         return u
 
@@ -200,7 +203,7 @@ def run(loadfile, savefile=None, multiview=None, histload=None,
         count_spikes=False):
     assert not multiview
 
-    layers, data = load_network(loadfile, multiview)
+    layers, data, dp = load_network(args.loadfile)
     hists = np.load(histload) if histload is not None else {}
 
     if 0:
@@ -236,7 +239,7 @@ def run(loadfile, savefile=None, multiview=None, histload=None,
     # test whole network
     with network:
         # xp = nengo.Probe(outputs['data'], synapse=None)
-        yp = nengo.Probe(outputs['fc10'], synapse=None)
+        yp = nengo.Probe(outputs['probs'], synapse=None)
         zp = nengo.Probe(outputs['logprob'], synapse=None)
 
         if count_spikes:
@@ -257,7 +260,7 @@ def run(loadfile, savefile=None, multiview=None, histload=None,
         # n = 20
         # n = 100
         # n = 1000
-        n = data['labels'].size  # test on all examples
+        n = len(data[0])  # test on all examples
 
         print("Running %d examples for %0.3f s each" % (n, presentation_time))
         sim = nengo_ocl.Simulator(network)
@@ -270,10 +273,10 @@ def run(loadfile, savefile=None, multiview=None, histload=None,
 
     get_ind = lambda t: int(t / presentation_time)
     inds = slice(0, get_ind(t[-2]) + 1)
-    images = data['data'][inds]
-    labels = data['labels'][inds]
-    data_mean = data['data_mean']
-    label_names = data['label_names']
+    images = data[0][inds]
+    labels = data[1][inds]
+    data_mean = dp.data_mean
+    label_names = dp.batch_meta['label_names']
 
     spikes = None
     if count_spikes:
@@ -294,8 +297,9 @@ def run(loadfile, savefile=None, multiview=None, histload=None,
         print("Saved '%s'" % savefile)
 
     # view(dt, images, labels, data_mean, label_names, t, y, z)
-    errors, _, _ = error(dt, presentation_time, labels, t, y, z)
-    print("Error: %f (%d samples)" % (errors.mean(), errors.size))
+    errors, top5errors, _, _ = error(dt, presentation_time, labels, t, y, z)
+    print("Error: %0.4f, %0.4f (%d samples)"
+          % (errors.mean(), top5errors.mean(), errors.size))
 
 
 def error(dt, pt, labels, t, y, z):
@@ -309,7 +313,10 @@ def error(dt, pt, labels, t, y, z):
     # y = nengo.synapses.filtfilt(y, s, dt)
 
     # ct = 0.01  # classification time
-    ct = 0.04  # classification time
+    # ct = 0.015  # classification time
+    ct = 0.02  # classification time
+    # ct = 0.03  # classification time
+    # ct = 0.04  # classification time
 
     # take average class over last 10 ms of each presentation
     pn = int(pt / dt)
@@ -317,11 +324,14 @@ def error(dt, pt, labels, t, y, z):
     n = y.shape[0] / pn
     assert cn <= pn
 
-    blocks = y.reshape(n, pn, y.shape[1])[:, -cn:, :]
+    probs = y.reshape(n, pn, y.shape[1])[:, -cn:, :].mean(1)
     labels = labels[:n]
-    assert blocks.shape[0] == labels.shape[0]
-    errors = np.argmax(blocks.mean(1), axis=1) != labels
-    return errors, y, z
+    assert probs.shape[0] == labels.shape[0]
+    inds = np.argsort(probs, axis=1)
+    top1errors = inds[:, -1] != labels
+    top5errors = np.all(inds[:, -5:] != labels[:, None], axis=1)
+
+    return top1errors, top5errors, y, z
 
 
 def view(dt, pt, images, labels, data_mean, label_names, t, y, z, n_max=30):
