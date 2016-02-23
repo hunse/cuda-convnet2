@@ -16,7 +16,7 @@ objs = np.load(args.loadfile)
 assert 'pt' in objs, "No presentation time!"
 
 kwargs = {}
-for n in ['dt', 'pt', 'images', 'labels', 'data_mean', 'label_names', 't', 'y', 'z']:
+for n in ['dt', 'pt', 'images', 'labels', 'data_mean', 'label_names', 't', 'y', 'z', 'spikes']:
     kwargs[n] = objs[n]
 
 errors, top5errors, y, z = error(

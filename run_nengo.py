@@ -331,10 +331,14 @@ def error(dt, pt, labels, t, y, z):
     top1errors = inds[:, -1] != labels
     top5errors = np.all(inds[:, -5:] != labels[:, None], axis=1)
 
+    z_labels = labels[(t / pt).astype(int) % len(labels)]
+    z = np.argmax(y, axis=1) != z_labels
+
     return top1errors, top5errors, y, z
 
 
-def view(dt, pt, images, labels, data_mean, label_names, t, y, z, n_max=30):
+def view(dt, pt, images, labels, data_mean, label_names, t, y, z, spikes=None, n_max=30):
+    import nengo.utils.matplotlib
 
     get_ind = lambda t: int(t / pt)
 
@@ -344,11 +348,28 @@ def view(dt, pt, images, labels, data_mean, label_names, t, y, z, n_max=30):
     y = y[:i_max]
     z = z[:i_max]
 
-    # plot
+    # compute transition points
+    transitions = np.diff((t / pt).astype(int))
+    transitions = np.concatenate(([0], transitions)).astype(bool)
+    transitions[-1] = 0
+    t_trans = np.tile(t[transitions], (2, 1))
+    def plot_transitions():
+        y_trans = np.tile(np.array(plt.ylim())[:, None], (1, t_trans.shape[1]))
+        plt.plot(t_trans, y_trans, 'k--')
+        # print(t_trans)
+        # print(y_trans)
+
+    n_spikes = 0
+    if spikes is not None:
+        spikes = spikes.item()
+        n_spikes = len(spikes)
+
+    rows, cols = 3 + n_spikes, 1
     plt.figure()
+
+    # plot images
     c, m, n = images.shape[1:]
     inds = slice(0, get_ind(t[-2]) + 1)
-
 
     imgs = images[inds]
     allimage = np.zeros((c, m, n * len(imgs)))
@@ -358,21 +379,48 @@ def view(dt, pt, images, labels, data_mean, label_names, t, y, z, n_max=30):
 
     allimage = np.transpose(allimage, (1, 2, 0))
 
-    rows, cols = 3, 1
     plt.subplot(rows, cols, 1)
-    plt.imshow(allimage, vmin=0, vmax=1)
+    plt.imshow(allimage, vmin=0, vmax=1, aspect='auto')
+    plt.xticks([])
+    plt.yticks([])
+    plt.ylabel('input')
 
-    plt.subplot(rows, cols, 2)
+    # plot spikes
+    for i, key in enumerate(sorted(spikes)):
+        max_neurons = 20
+        s = spikes[key]
+        if s.shape[1] > max_neurons:
+            s = s[:, np.random.permutation(s.shape[1])[:max_neurons]]
+
+        plt.subplot(rows, cols, i+2)
+        nengo.utils.matplotlib.rasterplot(t, s)
+        plot_transitions()
+        plt.xticks([])
+        plt.yticks([])
+        plt.ylabel(key.rstrip('_neurons'))
+
+    # plot classifier output
+    plt.subplot(rows, cols, rows-1)
     plt.plot(t, y)
     plt.xlim([t[0], t[-1]])
-    if len(label_names) <= 10:
-        plt.legend(label_names, fontsize=8, loc=2)
+    # if len(label_names) <= 10:
+    #     plt.legend(label_names, fontsize=8, loc=2)
+    plot_transitions()
+    plt.xticks([])
+    plt.yticks([0])
+    plt.ylabel('output')
 
-    plt.subplot(rows, cols, 3)
+    # plot error
+    plt.subplot(rows, cols, rows)
     plt.plot(t, z)
+    plot_transitions()
     plt.xlim([t[0], t[-1]])
     plt.ylim([-0.1, 1.1])
-    plt.ylabel('error (0 == correct)')
+    plt.yticks([0, 1])
+    plt.xlabel('time [s]')
+    plt.ylabel('error')
+
+    # plt.tight_layout()
 
     plt.show()
 
