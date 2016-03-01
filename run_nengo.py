@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import nengo
 nengo.log(level='info')
-import nengo_ocl
+import nengo_deeplearning
 
 from run_core import load_network, SoftLIFRate, round_layer
 
@@ -142,7 +142,7 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
         filters = layer['weights'][0].reshape(nc, s, s, nf)
         filters = np.rollaxis(filters, axis=-1, start=0)
         biases = layer['biases']
-        u = nengo.Node(nengo.processes.Conv2d(
+        u = nengo.Node(nengo_deeplearning.Conv2d(
             (nc, nx, nx), filters, biases, stride=st, padding=p), label=name)
         nengo.Connection(input0, u)
         return u
@@ -158,7 +158,7 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
         filters = layer['weights'][0].reshape(ny, ny, nc, s, s, nf)
         filters = np.rollaxis(filters, axis=-1, start=0)
         biases = layer['biases'][0].reshape(1, 1, 1)
-        u = nengo.Node(nengo.processes.Conv2d(
+        u = nengo.Node(nengo_deeplearning.Conv2d(
             (nc, nx, nx), filters, biases, stride=st, padding=p), label=name)
         nengo.Connection(input0, u)
         return u
@@ -171,7 +171,7 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
         c = layer['channels']
         nx = layer['imgSize']
 
-        u = nengo.Node(nengo.processes.Pool2d(
+        u = nengo.Node(nengo_deeplearning.Pool2d(
             (c, nx, nx), s, stride=st), label=name)
         nengo.Connection(input0, u, synapse=None)
         return u
@@ -199,11 +199,10 @@ def build_target_layer(target_key, layers, data, network, outputs=None, hists=No
     return outputs
 
 
-def run(loadfile, savefile=None, multiview=None, histload=None,
-        count_spikes=False):
-    assert not multiview
+def run(Simulator, loadfile, savefile=None, histload=None, count_spikes=False,
+        n_max=None):
 
-    layers, data, dp = load_network(args.loadfile)
+    layers, data, dp = load_network(loadfile)
     hists = np.load(histload) if histload is not None else {}
 
     if 0:
@@ -251,19 +250,18 @@ def run(loadfile, savefile=None, multiview=None, histload=None,
 
     if 0:
         # profile
+        import nengo_ocl
         sim = nengo_ocl.Simulator(network, profiling=True)
         # sim.run(0.005)
         sim.run(10 * presentation_time)
         sim.print_profiling()
     else:
-        # n = 3
-        # n = 20
-        # n = 100
-        # n = 1000
         n = len(data[0])  # test on all examples
+        if n_max is not None:
+            n = min(n, n_max)
 
         print("Running %d examples for %0.3f s each" % (n, presentation_time))
-        sim = nengo_ocl.Simulator(network)
+        sim = Simulator(network)
         sim.run(n * presentation_time)
 
     dt = sim.dt
@@ -426,17 +424,20 @@ def view(dt, pt, images, labels, data_mean, label_names, t, y, z, spikes=None, n
 
 
 if __name__ == '__main__':
-    # test_softlifrate()
-    # assert False
-
     import argparse
     parser = argparse.ArgumentParser(description="Run network in Nengo")
-    # parser.add_argument('--multiview', action='store_const', const=1, default=None)
     parser.add_argument('loadfile', help="Checkpoint to load")
     parser.add_argument('savefile', nargs='?', default=None, help="Where to save output")
     parser.add_argument('--histload', help="Layer histograms created by run_numpy")
     parser.add_argument('--spikes', action='store_true', help="Count spikes")
-
+    parser.add_argument('--ocl', action='store_true', help="Run using Nengo OCL")
+    parser.add_argument('--n', default=None, type=int, help="Number of examples to run")
     args = parser.parse_args()
-    run(args.loadfile, args.savefile, histload=args.histload,
-        count_spikes=args.spikes)
+
+    Simulator = nengo.Simulator
+    if args.ocl:
+        import nengo_ocl
+        Simulator = nengo_ocl.Simulator
+
+    run(Simulator, args.loadfile, savefile=args.savefile,
+        histload=args.histload, count_spikes=args.spikes, n_max=args.n)
