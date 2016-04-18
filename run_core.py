@@ -90,7 +90,7 @@ def softrelu(x, sigma=1.):
 
 
 class SoftLIFRate(nengo.neurons.LIFRate):
-    sigma = nengo.params.NumberParam(low=0)
+    sigma = nengo.params.NumberParam('sigma', low=0)
 
     def __init__(self, sigma=1., **lif_args):
         super(SoftLIFRate, self).__init__(**lif_args)

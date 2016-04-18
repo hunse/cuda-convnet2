@@ -3,20 +3,11 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
-import nengo
-import nengo_ocl
 
-from run_core import load_network, SoftLIFRate
+from run_core import load_network
 
 presentation_time = 0.15
 get_ind = lambda t: int(t / presentation_time)
-
-
-def hist_dist(hist, edges):
-    p = np.zeros(edges.size, dtype=float)
-    p[1:-1] = hist[:-1] + hist[1:]
-    p /= p.sum()
-    return nengo.dists.PDF(edges, p)
 
 
 def count_layer(layer, counts, hist=None):
@@ -57,51 +48,25 @@ def count_layer(layer, counts, hist=None):
         lcounts['flops'] = 2 * lcounts['n_synapses']
         return
 
-    if layer['type'] == 'conv':
+    if layer['type'] in ['conv', 'local']:
         assert len(layer['weights']) == 1
         lcounts['n_weights'] = layer['weights'][0].size
         lcounts['n_biases'] = layer['biases'].size
 
-        assert layer['sharedBiases']
-        assert layer['stride'][0] == 1
-
         c = layer['channels'][0]
-        f = layer['filters']
-        s = layer['filterSize'][0]
-        n = int(np.sqrt(layer['numInputs'][0] / c))
-        assert n == layer['modulesX']
-
+        nx = layer['imgSize'][0]
         lcounts['in_size'] = layer['numInputs'][0]
-        lcounts['in_shape'] = (c, n, n)
-        lcounts['out_size'] = f * n * n
-        lcounts['out_shape'] = (f, n, n)
+        lcounts['in_shape'] = (c, nx, nx)
+        assert lcounts['in_size'] == np.prod(lcounts['in_shape'])
 
-        lcounts['n_synapses'] = n**2 * c * s**2 * f
-        lcounts['n_full'] = lcounts['in_size'] * lcounts['out_size']
-        lcounts['flops'] = 2 * lcounts['n_synapses']
-        return
-
-    if layer['type'] == 'local':
-        assert len(layer['weights']) == 1
-        lcounts['n_weights'] = layer['weights'][0].size
-        lcounts['n_biases'] = layer['biases'].size
-
-        st = layer['stride'][0]
-        assert st == 1
-
-        c = layer['channels'][0]
         f = layer['filters']
+        ny = layer['modulesX']
+        lcounts['out_size'] = layer['outputs']
+        lcounts['out_shape'] = (f, ny, ny)
+        assert lcounts['out_size'] == np.prod(lcounts['out_shape'])
+
         s = layer['filterSize'][0]
-
-        n = int(np.sqrt(layer['numInputs'][0] / c))
-        assert n == layer['modulesX']
-
-        lcounts['in_size'] = c * n * n
-        lcounts['in_shape'] = (c, n, n)
-        lcounts['out_size'] = f * n * n
-        lcounts['out_shape'] = (f, n, n)
-
-        lcounts['n_synapses'] = n**2 * c * s**2 * f
+        lcounts['n_synapses'] = ny**2 * c * s**2 * f
         lcounts['n_full'] = lcounts['in_size'] * lcounts['out_size']
         lcounts['flops'] = 2 * lcounts['n_synapses']
         return
@@ -148,7 +113,7 @@ def count_target_layer(target_key, layers, counts, hists={}):
 
 
 def count(loadfile, histfile=None):
-    layers, data = load_network(loadfile)
+    layers, data, dp = load_network(loadfile)
     hists = np.load(histfile) if histfile is not None else {}
 
     counts = {}
