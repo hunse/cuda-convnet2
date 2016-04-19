@@ -10,8 +10,6 @@ import theano.tensor as tt
 # from convnet import ConvNet
 from run_core import load_network, SoftLIFRate, round_layer
 
-rng = np.random.RandomState(9)
-
 
 def compute_layer(layer, inputs, data):
     assert isinstance(inputs, list)
@@ -43,6 +41,8 @@ def compute_layer(layer, inputs, data):
         ntype = neuron['type']
         if ntype == 'ident':
             return x.copy()
+        if ntype == 'logistic':
+            return 1. / (1 + np.exp(-x))
         if ntype == 'relu':
             return np.maximum(0, x)
         if ntype == 'softlif':
@@ -116,34 +116,35 @@ def compute_layer(layer, inputs, data):
 
         assert y.shape[1:] == (nf, ny, ny)
         return y
+
     if layer['type'] == 'local':
-        st = layer['stride'][0]
-        assert st == 1
-
-        N = x.shape[0]
-        c = layer['channels'][0]
-        f = layer['filters']
-        s = layer['filterSize'][0]
-        s2 = (s - 1) / 2
-        nx = x.shape[-1]
+        n = x.shape[0]
+        nc = layer['channels'][0]
+        nx = layer['imgSize'][0]
         ny = layer['modulesX']
+        nf = layer['filters']
+        s = layer['filterSize'][0]
+        st = layer['stride'][0]
+        p = -layer['padding'][0]  # Alex makes -ve in layer.py (why?)
+        assert x.shape[1:] == (nc, nx, nx)
 
-        filters = layer['weights'][0].reshape(ny, ny, c, s, s, f)
+        filters = layer['weights'][0].reshape(ny, ny, nc, s, s, nf)
         filters = np.rollaxis(filters, axis=-1, start=0)
         biases = layer['biases'][0].reshape(1, 1, 1, 1)
 
-        y = np.zeros((N, f, ny, ny), dtype=x.dtype)
+        y = np.zeros((n, nf, ny, ny), dtype=x.dtype)
         for i in range(ny):
             for j in range(ny):
-                i0, i1 = i-s2, i+s2+1
-                j0, j1 = j-s2, j+s2+1
-                w = filters[:, i, j, :, max(-i0, 0):min(nx+s-i1, s),
-                                        max(-j0, 0):min(nx+s-j1, s)]
-                xij = x[:, :, max(i0, 0):min(i1, nx), max(j0, 0):min(j1, nx)]
-                y[:, :, i, j] = np.dot(xij.reshape(N, -1), w.reshape(f, -1).T)
+                xi0, xj0 = st*i-p, st*j-p
+                xi1, xj1 = xi0+s, xj0+s
+                w = filters[:, i, j, :, max(-xi0, 0):min(nx+s-xi1, s),
+                                        max(-xj0, 0):min(nx+s-xj1, s)]
+                xij = x[:, :, max(xi0, 0):min(xi1, nx), max(xj0, 0):min(xj1, nx)]
+                y[:, :, i, j] = np.dot(xij.reshape(n, -1), w.reshape(nf, -1).T)
 
         y += biases
         return y
+
     if layer['type'] == 'pool':
         assert x.shape[-2] == x.shape[-1]
         assert layer['start'] == 0

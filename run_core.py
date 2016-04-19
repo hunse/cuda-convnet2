@@ -1,5 +1,6 @@
 import numpy as np
 import nengo
+from nengo_deeplearning import SoftLIFRate
 
 from convdata import DataProvider, CIFARDataProvider
 from python_util.gpumodel import IGPUModel
@@ -26,10 +27,6 @@ def load_network(loadfile, multiview=None):
     if multiview is not None:
         dp_params['multiview_test'] = multiview
 
-    # for k, v in layers.items():
-    #     print k, v.get('inputs', None), v.get('outputs', None)
-
-    # print dp_params
     dp = DataProvider.get_instance(
         options['data_path'],
         batch_range=options['test_batch_range'],
@@ -79,53 +76,3 @@ def round_layer(layer, n_values, clip_percent=0):
             b_min = biases.min()
             b_max = biases.max()
             round_array(biases, n_values, b_min, b_max)
-
-
-def softrelu(x, sigma=1.):
-    y = x / sigma
-    z = np.array(x)
-    z[y < 34.0] = sigma * np.log1p(np.exp(y[y < 34.0]))
-    # ^ 34.0 gives exact answer in 32 or 64 bit but doesn't overflow in 32 bit
-    return z
-
-
-class SoftLIFRate(nengo.neurons.LIFRate):
-    sigma = nengo.params.NumberParam('sigma', low=0)
-
-    def __init__(self, sigma=1., **lif_args):
-        super(SoftLIFRate, self).__init__(**lif_args)
-        self.sigma = sigma
-
-    @property
-    def _argreprs(self):
-        args = super(SoftLIFRate, self)._argreprs
-        if self.sigma != 1.:
-            args.append("sigma=%s" % self.sigma)
-        return args
-
-    def rates(self, x, gain, bias):
-        J = gain * x + bias
-        out = np.zeros_like(J)
-        SoftLIFRate.step_math(self, dt=1, J=J, output=out)
-        return out
-
-    def step_math(self, dt, J, output):
-        """Compute rates in Hz for input current (incl. bias)"""
-        j = softrelu(J - 1, sigma=self.sigma)
-        output[:] = 0  # faster than output[j <= 0] = 0
-        output[j > 0] = 1. / (
-            self.tau_ref + self.tau_rc * np.log1p(1. / j[j > 0]))
-
-
-def test_softlifrate():
-    import matplotlib.pyplot as plt
-
-    neurons = SoftLIFRate(sigma=0.002, tau_rc=0.02, tau_ref=0.002)
-    x = np.linspace(-1, 1, 101)
-    r = neurons.rates(x, 1., 1.)
-    plt.plot(x, r)
-    plt.show()
-
-
-if __name__ == '__main__':
-    test_softlifrate()
