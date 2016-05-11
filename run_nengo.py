@@ -20,17 +20,19 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
     name = layer['name']
 
     if layer['type'] == 'cost.logreg':
-        assert pt is not None
         labels, probs = inputs
-        nlabels, nprobs = layer['numInputs']
-        assert nlabels == 1
+        return probs
 
-        def label_error(t, x, labels=labels):
-            return np.argmax(x) != labels[int(t / pt) % len(labels)]
+        # pt = params['presentation_time']
+        # nlabels, nprobs = layer['numInputs']
+        # assert nlabels == 1
 
-        u = nengo.Node(label_error, size_in=nprobs, label=name)
-        nengo.Connection(probs, u, synapse=None)
-        return u
+        # def label_error(t, x, labels=labels):
+        #     return np.argmax(x) != labels[int(t / pt) % len(labels)]
+
+        # u = nengo.Node(label_error, size_in=nprobs, label=name)
+        # nengo.Connection(probs, u, synapse=None)
+        # return u
 
     if layer['type'] == 'data':
         if layer['dataIdx'] == 0:
@@ -199,8 +201,16 @@ def build_target_layer(target_key, layers, data, network, outputs=None, hists=No
     return outputs
 
 
-def run(Simulator, loadfile, savefile=None, histload=None, count_spikes=False,
-        n_max=None):
+def run(loadfile, savefile=None, histload=None, count_spikes=False,
+        n_max=None, backend='nengo', ocl_profile=False):
+
+    if backend == 'nengo':
+        Simulator = nengo.Simulator
+    elif backend == 'nengo_ocl':
+        import nengo_ocl
+        Simulator = nengo_ocl.Simulator
+    else:
+        raise ValueError("Unsupported backend %r" % backend)
 
     layers, data, dp = load_network(loadfile)
     hists = np.load(histload) if histload is not None else {}
@@ -239,22 +249,18 @@ def run(Simulator, loadfile, savefile=None, histload=None, count_spikes=False,
     with network:
         # xp = nengo.Probe(outputs['data'], synapse=None)
         yp = nengo.Probe(outputs['probs'], synapse=None)
-        zp = nengo.Probe(outputs['logprob'], synapse=None)
+        # zp = nengo.Probe(outputs['logprob'], synapse=None)
 
         if count_spikes:
-            spikes_p = {}
-            for name in layers:
-                if layers[name]['type'] == 'neuron':
-                    # node outputs scaled spikes
-                    spikes_p[name] = nengo.Probe(outputs[name])
+            spikes_p = {name: nengo.Probe(outputs[name])
+                        for name in layers if layers[name]['type'] == 'neuron'}
 
-    if 0:
+    if ocl_profile:
         # profile
         import nengo_ocl
         sim = nengo_ocl.Simulator(network, profiling=True)
-        # sim.run(0.005)
-        sim.run(10 * presentation_time)
-        sim.print_profiling()
+        sim.run(0.01)
+        sim.print_profiling(sort=1)
     else:
         n = len(data[0])  # test on all examples
         if n_max is not None:
@@ -267,7 +273,7 @@ def run(Simulator, loadfile, savefile=None, histload=None, count_spikes=False,
     dt = sim.dt
     t = sim.trange()
     y = sim.data[yp]
-    z = sim.data[zp]
+    # z = sim.data[zp]
 
     get_ind = lambda t: int(t / presentation_time)
     inds = slice(0, get_ind(t[-2]) + 1)
@@ -291,16 +297,15 @@ def run(Simulator, loadfile, savefile=None, histload=None, count_spikes=False,
         np.savez(savefile,
                  images=images, labels=labels,
                  data_mean=data_mean, label_names=label_names,
-                 dt=dt, pt=presentation_time, t=t, y=y, z=z, spikes=spikes)
+                 dt=dt, pt=presentation_time, t=t, y=y, spikes=spikes)
         print("Saved '%s'" % savefile)
 
-    # view(dt, images, labels, data_mean, label_names, t, y, z)
-    errors, top5errors, _, _ = error(dt, presentation_time, labels, t, y, z)
+    errors, top5errors, _, _ = error(dt, presentation_time, labels, t, y)
     print("Error: %0.4f, %0.4f (%d samples)"
           % (errors.mean(), top5errors.mean(), errors.size))
 
 
-def error(dt, pt, labels, t, y, z):
+def error(dt, pt, labels, t, y, method='mean'):
     # filter outputs (better accuracy)
     # s = nengo.synapses.Alpha(0.002)  # 30ms_pt-0ms_alpha
     # s = nengo.synapses.Alpha(0.004)
@@ -315,6 +320,7 @@ def error(dt, pt, labels, t, y, z):
     ct = 0.02  # classification time
     # ct = 0.03  # classification time
     # ct = 0.04  # classification time
+    # ct = 0.08  # classification time
 
     # take average class over last 10 ms of each presentation
     pn = int(pt / dt)
@@ -322,7 +328,16 @@ def error(dt, pt, labels, t, y, z):
     n = y.shape[0] / pn
     assert cn <= pn
 
-    probs = y.reshape(n, pn, y.shape[1])[:, -cn:, :].mean(1)
+    # blocks to be used for classification
+    blocks = y.reshape(n, pn, y.shape[1])[:, -cn:, :]
+
+    if method == 'mean':
+        probs = blocks.mean(1)
+    elif method == 'peak':
+        probs = blocks.max(1)
+    else:
+        raise ValueError("Unrecognized method %r" % method)
+
     labels = labels[:n]
     assert probs.shape[0] == labels.shape[0]
     inds = np.argsort(probs, axis=1)
@@ -357,10 +372,8 @@ def view(dt, pt, images, labels, data_mean, label_names, t, y, z, spikes=None, n
         # print(t_trans)
         # print(y_trans)
 
-    n_spikes = 0
-    if spikes is not None:
-        spikes = spikes.item()
-        n_spikes = len(spikes)
+    spikes = [] if spikes is None else spikes
+    n_spikes = len(spikes)
 
     rows, cols = 3 + n_spikes, 1
     plt.figure()
@@ -431,13 +444,11 @@ if __name__ == '__main__':
     parser.add_argument('--histload', help="Layer histograms created by run_numpy")
     parser.add_argument('--spikes', action='store_true', help="Count spikes")
     parser.add_argument('--ocl', action='store_true', help="Run using Nengo OCL")
+    parser.add_argument('--ocl-profile', action='store_true', help="Profile Nengo OCL")
     parser.add_argument('--n', default=None, type=int, help="Number of examples to run")
     args = parser.parse_args()
 
-    Simulator = nengo.Simulator
-    if args.ocl:
-        import nengo_ocl
-        Simulator = nengo_ocl.Simulator
-
-    run(Simulator, args.loadfile, savefile=args.savefile,
-        histload=args.histload, count_spikes=args.spikes, n_max=args.n)
+    backend = 'nengo_ocl' if args.ocl else 'nengo'
+    run(args.loadfile, savefile=args.savefile, histload=args.histload,
+        count_spikes=args.spikes, n_max=args.n, backend=backend,
+        ocl_profile=args.ocl_profile)
