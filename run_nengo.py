@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import nengo
 nengo.log(level='info')
-import nengo_deeplearning
+import nengo_extras
 
 from run_core import load_network, SoftLIFRate, round_layer
 
@@ -142,7 +142,7 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
         filters = layer['weights'][0].reshape(nc, s, s, nf)
         filters = np.rollaxis(filters, axis=-1, start=0)
         biases = layer['biases']
-        u = nengo.Node(nengo_deeplearning.Conv2d(
+        u = nengo.Node(nengo_extras.Conv2d(
             (nc, nx, nx), filters, biases, stride=st, padding=p), label=name)
         nengo.Connection(input0, u)
         return u
@@ -158,7 +158,7 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
         filters = layer['weights'][0].reshape(ny, ny, nc, s, s, nf)
         filters = np.rollaxis(filters, axis=-1, start=0)
         biases = layer['biases'][0].reshape(1, 1, 1)
-        u = nengo.Node(nengo_deeplearning.Conv2d(
+        u = nengo.Node(nengo_extras.Conv2d(
             (nc, nx, nx), filters, biases, stride=st, padding=p), label=name)
         nengo.Connection(input0, u)
         return u
@@ -171,7 +171,7 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
         c = layer['channels']
         nx = layer['imgSize']
 
-        u = nengo.Node(nengo_deeplearning.Pool2d(
+        u = nengo.Node(nengo_extras.Pool2d(
             (c, nx, nx), s, stride=st), label=name)
         nengo.Connection(input0, u, synapse=None)
         return u

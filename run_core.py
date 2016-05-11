@@ -1,6 +1,6 @@
 import numpy as np
 import nengo
-from nengo_deeplearning import SoftLIFRate
+from nengo_extras import SoftLIFRate
 
 from convdata import DataProvider, CIFARDataProvider
 from python_util.gpumodel import IGPUModel

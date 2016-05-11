@@ -247,7 +247,7 @@ if __name__ == '__main__':
             print_acts(parent)
 
         output = outputs[name]
-        print("%15s: %10f %10f [%10f %10f]" % (
+        print("%15s: %10.3f (%10.3f) [%10.3f %10.3f]" % (
             name, output.mean(), output.std(), output.min(), output.max()))
 
     print_acts('probs')
