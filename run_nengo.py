@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 import matplotlib.pyplot as plt
 import numpy as np
 import nengo
@@ -81,7 +83,7 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
                 return earray.relu
             raise NotImplementedError(ntype)
 
-        e = nengo.Ensemble(n, 1, label='%s_neurons' % name)
+        e = nengo.Ensemble(n, 1, label=name)
         nengo.Connection(input0, e.neurons)
 
         if ntype == 'ident':
@@ -111,7 +113,7 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
             e.neuron_type = nengo.LIF(tau_rc=tau_rc, tau_ref=tau_ref)
             e.gain = alpha * np.ones(n)
             e.bias = 1. * np.ones(n)
-            u = nengo.Node(size_in=n, label=name)
+            u = nengo.Node(size_in=n, label='%s_out' % name)
             nengo.Connection(e.neurons, u, transform=amp, synapse=None)
             return u
         raise NotImplementedError(ntype)
@@ -119,14 +121,14 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
         # do nothing for now
         return input0
     if layer['type'] in ['dropout', 'dropout2']:
-        u = nengo.Node(size_in=layer['outputs'])
+        u = nengo.Node(size_in=layer['outputs'], label=name)
         nengo.Connection(input0, u, transform=layer['keep'])
         return u
     if layer['type'] == 'fc':
         weights = layer['weights'][0]
         biases = layer['biases'].ravel()
-        u = nengo.Node(size_in=layer['outputs'])
-        b = nengo.Node(output=biases)
+        u = nengo.Node(size_in=layer['outputs'], label=name)
+        b = nengo.Node(output=biases, label='%s_biases' % name)
         nengo.Connection(input0, u, transform=weights.T)
         nengo.Connection(b, u, synapse=None)
         return u
@@ -182,9 +184,9 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
 
 
 def build_target_layer(target_key, layers, data, network, outputs=None, hists=None, pt=None):
-    if outputs is None:
-        outputs = {}
-    elif target_key in outputs:
+    hists = {} if hists is None else hists
+    outputs = {} if outputs is None else outputs
+    if target_key in outputs:
         return outputs
 
     layer = layers[target_key]
@@ -212,7 +214,7 @@ def run(loadfile, savefile=None, histload=None, count_spikes=False,
     else:
         raise ValueError("Unsupported backend %r" % backend)
 
-    layers, data, dp = load_network(loadfile)
+    layers, data, dp = load_network(loadfile, sort_layers=True)
     hists = np.load(histload) if histload is not None else {}
 
     if 0:
@@ -252,8 +254,9 @@ def run(loadfile, savefile=None, histload=None, count_spikes=False,
         # zp = nengo.Probe(outputs['logprob'], synapse=None)
 
         if count_spikes:
-            spikes_p = {name: nengo.Probe(outputs[name])
-                        for name in layers if layers[name]['type'] == 'neuron'}
+            spikes_p = OrderedDict(
+                (name, nengo.Probe(outputs[name]))
+                for name in layers if layers[name]['type'] == 'neuron')
 
     if ocl_profile:
         # profile
@@ -285,7 +288,7 @@ def run(loadfile, savefile=None, histload=None, count_spikes=False,
     spikes = None
     if count_spikes:
         trange = float(t[-1] - t[0])
-        spikes = {k: sim.data[v] for k, v in spikes_p.items()}
+        spikes = OrderedDict((k, sim.data[v]) for k, v in spikes_p.items())
         counts = [(v > 0).sum() / trange for v in spikes.values()]
         neurons = [v.shape[1] for v in spikes.values()]
         rates = [c / n for c, n in zip(counts, neurons)]

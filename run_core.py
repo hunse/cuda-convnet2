@@ -1,3 +1,5 @@
+import collections
+
 import numpy as np
 import nengo
 from nengo_extras import SoftLIFRate
@@ -6,10 +8,30 @@ from convdata import DataProvider, CIFARDataProvider
 from python_util.gpumodel import IGPUModel
 
 
-def load_network(loadfile, multiview=None):
+def get_depths(layers):
+    depths = {}
+
+    def get_depth(key):
+        if key not in depths:
+            inputs = [get_depth(k) for k in layers[key].get('inputs', [])]
+            depths[key] = max(inputs) + 1 if len(inputs) > 0 else 0
+        return depths[key]
+
+    for key in layers:
+        get_depth(key)
+
+    return depths
+
+
+def load_network(loadfile, multiview=None, sort_layers=False):
     load_dic = IGPUModel.load_checkpoint(loadfile)
     layers = load_dic['model_state']['layers']
     op = load_dic['op']
+
+    if sort_layers:
+        depths = get_depths(layers)
+        layers = collections.OrderedDict(
+            sorted(layers.items(), key=lambda item: depths[item[0]]))
 
     options = {}
     for o in load_dic['op'].get_options_list():

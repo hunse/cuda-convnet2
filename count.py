@@ -32,7 +32,7 @@ def count_layer(layer, counts, hist=None):
     if layer['type'] == 'softmax':
         return
 
-    if layer['type'] == 'dropout':
+    if layer['type'] in ['dropout', 'dropout2']:
         return
 
     if layer['type'] == 'fc':
