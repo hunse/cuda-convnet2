@@ -16,18 +16,23 @@ objs = np.load(args.loadfile)
 assert 'pt' in objs, "No presentation time!"
 
 kwargs = {}
-for n in ['dt', 'pt', 'images', 'labels', 'data_mean', 'label_names', 't', 'y', 'z', 'spikes']:
+for n in ['dt', 'pt', 'images', 'labels', 'data_mean', 'label_names', 't', 'y', 'spikes']:
     kwargs[n] = objs[n]
+kwargs['spikes'] = kwargs['spikes'].item()
 
 errors, top5errors, y, z = error(
-    *[kwargs[n] for n in ('dt', 'pt', 'labels', 't', 'y', 'z')])
+    *[kwargs[n] for n in ('dt', 'pt', 'labels', 't', 'y')])
 print("Error: %0.4f, %0.4f (%d samples)"
       % (errors.mean(), top5errors.mean(), errors.size))
 kwargs['y'] = y
 kwargs['z'] = z
 
 if args.view:
+    import matplotlib.pyplot as plt
     view(**kwargs)
+    # classification_start_time_plot(
+    #     **{k: kwargs[k] for k in ['dt', 'pt', 'labels', 't', 'y']})
+    plt.show()
 
 if args.spikes:
     import matplotlib.pyplot as plt

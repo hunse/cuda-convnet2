@@ -229,20 +229,21 @@ def run(loadfile, savefile=None, histload=None, count_spikes=False,
     # presentation_time = 0.03
     # presentation_time = 0.04
     # presentation_time = 0.05
-    presentation_time = 0.08
+    # presentation_time = 0.06
+    # presentation_time = 0.08
     # presentation_time = 0.1
     # presentation_time = 0.13
     # presentation_time = 0.15
-    # presentation_time = 0.2
+    presentation_time = 0.2
 
-    network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
+    # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.001)
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.005)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.001)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.002)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.003)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.004)
-    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
+    network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
 
     outputs = build_target_layer(
         'logprob', layers, data, network, hists=hists, pt=presentation_time)
@@ -262,7 +263,7 @@ def run(loadfile, savefile=None, histload=None, count_spikes=False,
         # profile
         import nengo_ocl
         sim = nengo_ocl.Simulator(network, profiling=True)
-        sim.run(0.01)
+        sim.run(presentation_time)
         sim.print_profiling(sort=1)
     else:
         n = len(data[0])  # test on all examples
@@ -308,31 +309,18 @@ def run(loadfile, savefile=None, histload=None, count_spikes=False,
           % (errors.mean(), top5errors.mean(), errors.size))
 
 
-def error(dt, pt, labels, t, y, method='mean'):
-    # filter outputs (better accuracy)
-    # s = nengo.synapses.Alpha(0.002)  # 30ms_pt-0ms_alpha
-    # s = nengo.synapses.Alpha(0.004)
-    # s = nengo.synapses.Alpha(0.005)
-    s = nengo.synapses.Alpha(0.01)
-    # s = nengo.synapses.Alpha(0.02)
-    y = nengo.synapses.filt(y, s, dt)
-    # y = nengo.synapses.filtfilt(y, s, dt)
-
-    # ct = 0.01  # classification time
-    # ct = 0.015  # classification time
-    ct = 0.02  # classification time
-    # ct = 0.03  # classification time
-    # ct = 0.04  # classification time
-    # ct = 0.08  # classification time
-
-    # take average class over last 10 ms of each presentation
+def error_lims(dt, pt, labels, t, y, method='mean', ct_start=0., ct_end=1.):
+    assert ct_start < ct_end
+    cn0 = int(np.floor(ct_start * pt / dt))
+    cn1 = int(np.ceil(ct_end * pt / dt))
     pn = int(pt / dt)
-    cn = int(ct / dt)
     n = y.shape[0] / pn
-    assert cn <= pn
+    assert cn0 >= 0
+    assert cn1 <= pn
+    assert cn0 < cn1
 
     # blocks to be used for classification
-    blocks = y.reshape(n, pn, y.shape[1])[:, -cn:, :]
+    blocks = y.reshape(n, pn, y.shape[1])[:, cn0:cn1, :]
 
     if method == 'mean':
         probs = blocks.mean(1)
@@ -350,6 +338,37 @@ def error(dt, pt, labels, t, y, method='mean'):
     z_labels = labels[(t / pt).astype(int) % len(labels)]
     z = np.argmax(y, axis=1) != z_labels
 
+    return top1errors, top5errors, z
+
+
+def error(dt, pt, labels, t, y, method='mean'):
+    # filter outputs (better accuracy)
+    # s = nengo.synapses.Alpha(0.002)  # 30ms_pt-0ms_alpha
+    # s = nengo.synapses.Alpha(0.004)
+    # s = nengo.synapses.Alpha(0.005)
+    s = nengo.synapses.Alpha(0.01)
+    # s = nengo.synapses.Alpha(0.02)
+    # y = nengo.synapses.filt(y, s, dt)
+    # y = nengo.synapses.filtfilt(y, s, dt)
+
+    ct = 0.01  # classification time
+    # ct = 0.015  # classification time
+    # ct = 0.02  # classification time
+    # ct = 0.03  # classification time
+    # ct = 0.04  # classification time
+    # ct = 0.05  # classification time
+    # ct = 0.06  # classification time
+    # ct = 0.07  # classification time
+    # ct = 0.075  # classification time
+    # ct = 0.08  # classification time
+    # ct = 0.09  # classification time
+    # ct = 0.10  # classification time
+    # ct = 0.15  # classification time
+
+    top1errors, top5errors, z = error_lims(
+        dt, pt, labels, t, y, method=method, ct_start=((pt - ct) / pt))
+        # dt, pt, labels, t, y, method=method, ct_start=(ct / pt))
+        # dt, pt, labels, t, y, method=method, ct_start=(ct / pt), ct_end=(0.06 / pt))
     return top1errors, top5errors, y, z
 
 
@@ -436,7 +455,43 @@ def view(dt, pt, images, labels, data_mean, label_names, t, y, z, spikes=None, n
 
     # plt.tight_layout()
 
-    plt.show()
+    # plt.show()
+
+
+def classification_start_time_plot(dt, pt, labels, t, y):
+
+    # s = nengo.synapses.Alpha(0.002)  # 30ms_pt-0ms_alpha
+    # s = nengo.synapses.Alpha(0.004)
+    # s = nengo.synapses.Alpha(0.005)
+    # s = nengo.synapses.Alpha(0.01)
+    # s = nengo.synapses.Alpha(0.02)
+    # y = nengo.synapses.filt(y, s, dt)
+    # y = nengo.synapses.filtfilt(y, s, dt)
+
+    # dstart = 0.005
+    dstart = 0.01
+    dend = 0.001
+    # ct_starts = dstart * np.arange(int(pt / dstart))
+    # ct_starts = dstart * np.arange(int(0.8 * pt / dstart))
+    ct_starts = dstart * np.arange(int(pt / dstart))[:7]
+
+    results = []
+    for ct_start in ct_starts:
+        ct_ends = dend * np.arange(ct_start / dend + 1, pt / dend + 1)
+        errors = []
+        for ct_end in ct_ends:
+            e, _, _ = error_lims(
+                dt, pt, labels, t, y, ct_start=ct_start/pt, ct_end=ct_end/pt)
+            errors.append(e.mean())
+        results.append((ct_start, ct_ends, errors))
+
+    plt.figure()
+    for ct_start, ct_ends, errors in results:
+        plt.semilogy(ct_ends, errors, label='%0.3f' % ct_start)
+
+    error_min = min(*[np.min(errors) for _, _, errors in results])
+    plt.xlim([0., pt])
+    plt.ylim([0.8*error_min, 1.0])
 
 
 if __name__ == '__main__':
