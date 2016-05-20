@@ -26,8 +26,10 @@ def compute_layer(layer, inputs, data):
         assert labels.ndim == 1
         assert labels.shape[0] == probs.shape[0]
         cost = -np.log(probs)[np.arange(probs.shape[0]), labels].mean()
-        error = (np.argmax(probs, axis=1) != labels).mean()
-        return cost, error
+        inds = np.argsort(probs, axis=1)
+        top1error = (inds[:, -1] != labels).mean()
+        top5error = (inds[:, -5:] != labels[:, None]).all(axis=1).mean()
+        return cost, top1error, top5error
 
     # single input layers
     assert len(inputs) == 1
