@@ -414,7 +414,8 @@ def test_cifar100_data_provider():
 def test_mnist_data_provider():
     # dp_params = dict(inner_size=24, multiview_test=0, scalar_mean=0)
     dp_params = dict(inner_size=0, multiview_test=0, scalar_mean=0)
-    dp = MNISTDataProvider('/home/ehunsber/data/mnist-py-colmajor', range(1, 8), dp_params=dp_params, test=False)
+    # dp = MNISTDataProvider('/home/ehunsber/data/mnist-py-colmajor', range(1, 8), dp_params=dp_params, test=False)
+    dp = MNISTDataProvider('/home/ehunsber/data/spaun-py-colmajor', range(1, 8), dp_params=dp_params, test=False)
     test_data_provider(dp)
 
 
@@ -428,5 +429,5 @@ def test_svhn_data_provider():
 if __name__ == '__main__':
     # test_cifar10_data_provider()
     # test_cifar100_data_provider()
-    # test_mnist_data_provider()
-    test_svhn_data_provider()
+    test_mnist_data_provider()
+    # test_svhn_data_provider()

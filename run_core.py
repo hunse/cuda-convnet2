@@ -4,9 +4,6 @@ import numpy as np
 import nengo
 from nengo_extras import SoftLIFRate
 
-from convdata import DataProvider, CIFARDataProvider
-from python_util.gpumodel import IGPUModel
-
 
 def get_depths(layers):
     depths = {}
@@ -24,6 +21,9 @@ def get_depths(layers):
 
 
 def load_network(loadfile, multiview=None, sort_layers=False):
+    from convdata import DataProvider
+    from python_util.gpumodel import IGPUModel
+
     load_dic = IGPUModel.load_checkpoint(loadfile)
     layers = load_dic['model_state']['layers']
     op = load_dic['op']

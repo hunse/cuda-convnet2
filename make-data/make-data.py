@@ -257,6 +257,76 @@ def make_mnist():
     print "All done! MNIST batches are in %s" % target_dir
 
 
+def make_spaun():
+    import numpy as np
+    rng = np.random.RandomState(9)
+
+    parser = argp.ArgumentParser()
+    parser.add_argument('--src-dir', help='Directory containing mnist.pkl.gz', required=True)
+    parser.add_argument('--tgt-dir', help='Directory for output batches', required=True)
+    args = parser.parse_args()
+    source_dir = args.src_dir
+    target_dir = args.tgt_dir
+    makedir(target_dir)
+
+    # Available at http://deeplearning.net/data/mnist/mnist.pkl.gz
+    MNIST_DATA = os.path.join(source_dir, "mnist.pkl.gz")
+    SPAUN_DATA = os.path.join(source_dir, "spaun_sym.pkl.gz")
+
+    batch_size = 10000
+    image_size = 28
+    channels = 1
+    num_vis = image_size**2 * channels
+
+    with gzip.open(MNIST_DATA, 'rb') as f:
+        train_set, valid_set, test_set = cPickle.load(f)
+    with gzip.open(SPAUN_DATA, 'rb') as f:
+        spaun_set, _, _ = cPickle.load(f)  # 'valid' and 'test' == 'train'
+
+    # Augment spaun data
+    x, y = spaun_set[0][10:], spaun_set[1][10:]  # only non-digits
+
+    def aug(data, ratio):
+        images, labels = data
+        n = images.shape[0] / 10  # approximate examples per label
+        na = int(n * ratio)       # examples per augmented category
+
+        xx = np.vstack([images, np.tile(x, (na, 1))])
+        yy = np.hstack([labels, np.tile(y, na)])
+        i = rng.permutation(len(xx))
+        return xx[i], yy[i]
+
+    ratio = 0.2
+    train_set = aug(train_set, ratio)
+    valid_set = aug(valid_set, ratio)
+    test_set = aug(test_set, ratio)
+
+    full_data = np.hstack([train_set[0].T, valid_set[0].T, test_set[0].T])
+    full_labels = np.hstack([train_set[1], valid_set[1], test_set[1]])
+    assert full_data.shape == (num_vis, full_labels.size)
+    print(full_data.shape)
+
+    for i in range(full_data.shape[-1] / batch_size):
+        batch_file = os.path.join(target_dir, 'data_batch_%d' % (i + 1))
+        pickle(batch_file,
+               {'data': full_data[:,i*batch_size:(i+1)*batch_size],
+                'labels': full_labels[i*batch_size:(i+1)*batch_size]})
+        print "Wrote %s" % batch_file
+
+    # Write meta file
+    label_names = ['%d' % i for i in np.unique(full_labels)]
+    print(label_names)
+    meta = {'data_mean': full_data.mean(axis=-1, keepdims=True),
+            'batch_size': batch_size,
+            'img_size': image_size,
+            'num_vis': num_vis,
+            'label_names': label_names}
+    meta_file = os.path.join(args.tgt_dir, 'batches.meta')
+    pickle(meta_file, meta)
+    print "Wrote %s" % meta_file
+    print "All done! MNIST batches are in %s" % target_dir
+
+
 def make_svhn():
     import numpy as np
     import scipy.io.matlab
@@ -329,7 +399,8 @@ def make_svhn():
 
 
 if __name__ == "__main__":
-    make_ilsvrc()
+    # make_ilsvrc()
     # make_cifar100()
     # make_mnist()
+    make_spaun()
     # make_svhn()
