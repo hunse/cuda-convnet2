@@ -537,7 +537,6 @@ public:
     LinearNeuron(float a, float b) : Neuron(), _a(a), _b(b) {
     }
 };
-#endif	/* NEURONS_CUH */
 
 /* =======================
  * SoftLifNeuron
@@ -548,64 +547,128 @@ public:
  * v = amp / (tau_ref + tau_rc * log(1 + 1/j))
  * =======================
  */
+class SoftLifGradientOperator {
+private:
+    float _ref, _rc, _gain7gamma, _gamma, _amp_gain_rc;
+public:
+    __device__ inline float operator()(float unitActGrad, float unitInput) const  {
+        float y = _gain7gamma * unitInput;
+        float j = (y > 4.0f) ? y : log1pf(expf(y));
+        j *= _gamma;
+        float vb = _ref + _rc * log1pf(__fdividef(1.0f, j));
+        float den = vb * vb * j * (j + 1.0f) * (1.0f + __expf(-y));
+        return (den > 0.0f) ? __fdividef(_amp_gain_rc * unitActGrad, den) : 0.0f;
+    }
+
+    SoftLifGradientOperator(float amp, float ref, float rc, float gain, float gamma)
+        : _ref(ref), _rc(rc), _gain7gamma(gain / gamma), _gamma(gamma),
+          _amp_gain_rc(amp * gain * rc) {
+    }
+};
+
 class SoftLifNeuron : public Neuron {
 protected:
-    float _m, _t, _r, _a, _g, _n;
+    float _amp, _ref, _rc, _gain, _gamma, _sigma;
 
     void _activate() {
-        _outputs->randomizeGaussian(_n);  // fill _outputs with G(0, _n)
-        _inputs->applyBinary(SoftLifOperator(_m, _t, _r, _a, _g), *_outputs, *_outputs);
+        _outputs->randomizeGaussian(_sigma);  // fill _outputs with G(0, _sigma)
+        _inputs->applyBinary(SoftLifOperator(_amp, _ref, _rc, _gain, _gamma), *_outputs, *_outputs);
     }
 
     void _computeInputGrad(NVMatrix& actsGrad, NVMatrix& target) {
-        actsGrad.applyBinary(SoftLifGradientOperator(_m, _t, _r, _a, _g), *_inputs, target);
+        actsGrad.applyBinary(SoftLifGradientOperator(_amp, _ref, _rc, _gain, _gamma), *_inputs, target);
     }
 
     void _addInputGrad(NVMatrix& actsGrad, NVMatrix& target) {
         actsGrad.applyTernary(
             AddGradientBinaryOperator<SoftLifGradientOperator>(
-                SoftLifGradientOperator(_m, _t, _r, _a, _g)), *_inputs, target, target);
+                SoftLifGradientOperator(_amp, _ref, _rc, _gain, _gamma)), *_inputs, target, target);
     }
 public:
     class SoftLifOperator {
     private:
-        float _m, _t, _r, _a_g, _g;
+        float _amp, _ref, _rc, _gain7gamma, _gamma;
     public:
         __device__ inline float operator()(float unitInput, float noise) const {
-            float y = _a_g * unitInput;
+            float y = _gain7gamma * unitInput;
             float j = (y > 4.0f) ? y : log1pf(expf(y));
-            j *= _g;
+            j *= _gamma;
             float r = (j > 0.0f) ? __fdividef(
-                _m, _t + _r * log1pf(__fdividef(1.0f, j))) : 0.0f;
+                _amp, _ref + _rc * log1pf(__fdividef(1.0f, j))) : 0.0f;
             if (y > 0.0f)
-                r += _m * noise;  // add noise
+                r += _amp * noise;  // add noise
             return (r > 0.0f) ? r : 0.0f;
         }
 
         SoftLifOperator(float m, float t, float r, float a, float g)
-            : _m(m), _t(t), _r(r), _a_g(a / g), _g(g) {
+            : _amp(m), _ref(t), _rc(r), _gain7gamma(a / g), _gamma(g) {
         }
     };
 
-    class SoftLifGradientOperator {
-    private:
-        float _m, _t, _r, _a_g, _g, _arm;
-    public:
-        __device__ inline float operator()(float unitActGrad, float unitInput) const  {
-            float y = _a_g * unitInput;
-            float j = (y > 4.0f) ? y : log1pf(expf(y));
-            j *= _g;
-            float vb = _t + _r * log1pf(__fdividef(1.0f, j));
-            float den = vb * vb * j * (j + 1.0f) * (1.0f + __expf(-y));
-            return (den > 0.0f) ? __fdividef(_arm * unitActGrad, den) : 0.0f;
-        }
-
-        SoftLifGradientOperator(float m, float t, float r, float a, float g)
-            : _m(m), _t(t), _r(r), _a_g(a / g), _g(g), _arm(a * r * m) {
-        }
-    };
 
     SoftLifNeuron(float m, float t, float r, float a, float g, float n)
-        : Neuron(), _m(m), _t(t), _r(r), _a(a), _g(g), _n(n) {
+        : Neuron(), _amp(m), _ref(t), _rc(r), _gain(a), _gamma(g), _sigma(n) {
     }
 };
+
+/* =======================
+ * SoftLifAlphaNeuron
+ * -----------------------
+ * SoftLIF neuron with noise based on alpha-synapse filtering of spike train.
+ * =======================
+ */
+class SoftLifAlphaNeuron : public Neuron {
+protected:
+    float _amp, _ref, _rc, _gain, _gamma, _tau_s;
+
+    void _activate() {
+        _outputs->randomizeUniform();  // fill _outputs with U(0, 1)
+        _inputs->applyBinary(
+            SoftLifAlphaOperator(_amp, _ref, _rc, _gain, _gamma, _tau_s), *_outputs, *_outputs);
+    }
+
+    void _computeInputGrad(NVMatrix& actsGrad, NVMatrix& target) {
+        actsGrad.applyBinary(SoftLifGradientOperator(_amp, _ref, _rc, _gain, _gamma), *_inputs, target);
+    }
+
+    void _addInputGrad(NVMatrix& actsGrad, NVMatrix& target) {
+        actsGrad.applyTernary(
+            AddGradientBinaryOperator<SoftLifGradientOperator>(
+                SoftLifGradientOperator(_amp, _ref, _rc, _gain, _gamma)), *_inputs, target, target);
+    }
+public:
+    class SoftLifAlphaOperator {
+    private:
+        float _amp, _ref, _rc, _gain7gamma, _gamma, _tau_s, _tau_s2inv;
+    public:
+        __device__ inline float operator()(float unitInput, float uniform01) const {
+            float y = _gain7gamma * unitInput;
+            float j = (y > 4.0f) ? y : log1pf(expf(y));
+            j *= _gamma;
+            float p = (j > 0.0f) ? _ref + _rc * log1pf(__fdividef(1.0f, j)) : -1.0f;
+
+            float r = 0.0f;
+            if (p > 0) {
+                // compute noisy rate
+                float t = uniform01 * p;
+                float root = expf(__fdividef(-p, _tau_s));
+                float root1 = 1 - root;
+                r = _tau_s2inv * expf(__fdividef(-t, _tau_s)) *
+                    (__fdividef(t, root1) + __fdividef(p * root, root1*root1));
+            }
+            return _amp * r;
+        }
+
+        SoftLifAlphaOperator(float m, float t, float r, float a, float g, float tau_s)
+            : _amp(m), _ref(t), _rc(r), _gain7gamma(a / g), _gamma(g),
+              _tau_s(tau_s), _tau_s2inv(1.0f / (tau_s * tau_s)) {
+        }
+    };
+
+    SoftLifAlphaNeuron(float amp, float ref, float rc, float gain, float gamma, float tau_s)
+        : Neuron(), _amp(amp), _ref(ref), _rc(rc), _gain(gain), _gamma(gamma), _tau_s(tau_s) {
+    }
+};
+
+
+#endif	/* NEURONS_CUH */

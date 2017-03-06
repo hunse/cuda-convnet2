@@ -1568,21 +1568,23 @@ layer_parsers = {'data' :           lambda : DataLayerParser(),
 # All the neuron parsers
 # This isn't a name --> parser mapping as the layer parsers above because neurons don't have fixed names.
 # A user may write tanh[0.5,0.25], etc.
-neuron_parsers = sorted([NeuronParser('ident', 'f(x) = x', uses_acts=False, uses_inputs=False),
-                         NeuronParser('logistic', 'f(x) = 1 / (1 + e^-x)', uses_acts=True, uses_inputs=False),
-                         NeuronParser('abs', 'f(x) = |x|', uses_acts=False, uses_inputs=True),
-                         NeuronParser('relu', 'f(x) = max(0, x)', uses_acts=True, uses_inputs=False),
-                         NeuronParser('nrelu', 'f(x) = max(0, x) + noise', uses_acts=True, uses_inputs=False),
-                         NeuronParser('softrelu', 'f(x) = log(1 + e^x)', uses_acts=True, uses_inputs=False),
-                         NeuronParser('square', 'f(x) = x^2', uses_acts=False, uses_inputs=True),
-                         NeuronParser('sqrt', 'f(x) = sqrt(x)', uses_acts=True, uses_inputs=False),
-                         ParamNeuronParser('log[a]', 'f(x) = log(a + x)', uses_acts=False, uses_inputs=True),
-                         ParamNeuronParser('tanh[a,b]', 'f(x) = a * tanh(b * x)', uses_acts=True, uses_inputs=False),
-                         ParamNeuronParser('brelu[a]', 'f(x) = min(a, max(0, x))', uses_acts=True, uses_inputs=False),
-                         ParamNeuronParser('linear[a,b]', 'f(x) = a * x + b', uses_acts=True, uses_inputs=False),
-                         ParamNeuronParser('drelu[a]', 'f(x) = x - a * tanh(x / a)', uses_acts=False, uses_inputs=True),
-                         ParamNeuronParser('softlif[m,t,r,a,g,n]', 'f(x) = m / (t + r * log1p(1/j)) + N(0, m*n), where j = g*softrelu(a*x/g)', uses_acts=False, uses_inputs=True)],
-                        key=lambda x:x.type)
+neuron_parsers = sorted([
+    NeuronParser('ident', 'f(x) = x', uses_acts=False, uses_inputs=False),
+    NeuronParser('logistic', 'f(x) = 1 / (1 + e^-x)', uses_acts=True, uses_inputs=False),
+    NeuronParser('abs', 'f(x) = |x|', uses_acts=False, uses_inputs=True),
+    NeuronParser('relu', 'f(x) = max(0, x)', uses_acts=True, uses_inputs=False),
+    NeuronParser('nrelu', 'f(x) = max(0, x) + noise', uses_acts=True, uses_inputs=False),
+    NeuronParser('softrelu', 'f(x) = log(1 + e^x)', uses_acts=True, uses_inputs=False),
+    NeuronParser('square', 'f(x) = x^2', uses_acts=False, uses_inputs=True),
+    NeuronParser('sqrt', 'f(x) = sqrt(x)', uses_acts=True, uses_inputs=False),
+    ParamNeuronParser('log[a]', 'f(x) = log(a + x)', uses_acts=False, uses_inputs=True),
+    ParamNeuronParser('tanh[a,b]', 'f(x) = a * tanh(b * x)', uses_acts=True, uses_inputs=False),
+    ParamNeuronParser('brelu[a]', 'f(x) = min(a, max(0, x))', uses_acts=True, uses_inputs=False),
+    ParamNeuronParser('linear[a,b]', 'f(x) = a * x + b', uses_acts=True, uses_inputs=False),
+    ParamNeuronParser('drelu[a]', 'f(x) = x - a * tanh(x / a)', uses_acts=False, uses_inputs=True),
+    ParamNeuronParser('softlif[m,t,r,a,g,n]', 'f(x) = m / (t + r * log1p(1/j)) + N(0, m*n), where j = g*softrelu(a*x/g)', uses_acts=False, uses_inputs=True),
+    ParamNeuronParser('softlifalpha[m,t,r,a,g,s]', 'softlif with alpha synapse noise', uses_acts=False, uses_inputs=True),
+], key=lambda x:x.type)
 
 # Learning rate schedules
 lrs_parsers = sorted([ParamParser('const[fbase]'),
