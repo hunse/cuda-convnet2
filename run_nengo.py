@@ -147,7 +147,7 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
         filters = np.rollaxis(filters, axis=-1, start=0)
         biases = layer['biases']
         u = nengo.Node(nengo_extras.Conv2d(
-            (nc, nx, nx), filters, biases, stride=st, padding=p), label=name)
+            (nc, nx, nx), filters, biases, strides=st, padding=p), label=name)
         nengo.Connection(input0, u)
         return u
     if layer['type'] == 'local':
@@ -163,7 +163,7 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
         filters = np.rollaxis(filters, axis=-1, start=0)
         biases = layer['biases'][0].reshape(1, 1, 1)
         u = nengo.Node(nengo_extras.Conv2d(
-            (nc, nx, nx), filters, biases, stride=st, padding=p), label=name)
+            (nc, nx, nx), filters, biases, strides=st, padding=p), label=name)
         nengo.Connection(input0, u)
         return u
     if layer['type'] == 'pool':
@@ -176,7 +176,7 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
         nx = layer['imgSize']
 
         u = nengo.Node(nengo_extras.Pool2d(
-            (c, nx, nx), s, stride=st), label=name)
+            (c, nx, nx), s, strides=st), label=name)
         nengo.Connection(input0, u, synapse=None)
         return u
 

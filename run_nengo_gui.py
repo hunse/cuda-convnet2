@@ -114,4 +114,4 @@ for obj in model.all_nodes + model.all_ensembles:
 #     spikes_p = {name: nengo.Probe(outputs[name])
 #                 for name in layers if layers[name]['type'] == 'neuron'}
 
-nengo_gui.GUI(__file__, backend=backend).start()
+# nengo_gui.GUI(__file__, backend=backend).start()
