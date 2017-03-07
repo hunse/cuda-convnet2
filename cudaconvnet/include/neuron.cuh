@@ -648,7 +648,7 @@ public:
             float p = (j > 0.0f) ? _ref + _rc * log1pf(__fdividef(1.0f, j)) : -1.0f;
 
             float r = 0.0f;
-            if (p > 0) {
+            if (p > 0.0f) {
                 // compute noisy rate
                 float t = uniform01 * p;
                 float root = expf(__fdividef(-p, _tau_s));
@@ -656,6 +656,7 @@ public:
                 r = _tau_s2inv * expf(__fdividef(-t, _tau_s)) *
                     (__fdividef(t, root1) + __fdividef(p * root, root1*root1));
             }
+
             return _amp * r;
         }
 
