@@ -639,30 +639,27 @@ protected:
 public:
     class SoftLifAlphaOperator {
     private:
-        float _amp, _ref, _rc, _gain7gamma, _gamma, _tau_s, _tau_s2inv;
+        float _amp, _ref, _rc, _gain7gamma, _gamma, _tau_s, _tau_si;
     public:
         __device__ inline float operator()(float unitInput, float uniform01) const {
             float y = _gain7gamma * unitInput;
             float j = (y > 4.0f) ? y : log1pf(expf(y));
             j *= _gamma;
             float p = (j > 0.0f) ? _ref + _rc * log1pf(__fdividef(1.0f, j)) : -1.0f;
+            // ^ Note: p can be +inf
 
-            float r = 0.0f;
-            if (p > 0.0f) {
-                // compute noisy rate
-                float t = uniform01 * p;
-                float root = expf(__fdividef(-p, _tau_s));
-                float root1 = 1 - root;
-                r = _tau_s2inv * expf(__fdividef(-t, _tau_s)) *
-                    (__fdividef(t, root1) + __fdividef(p * root, root1*root1));
-            }
-
-            return _amp * r;
+            // compute noisy rate
+            float t = uniform01 * p;
+            float rho = -expm1f(-p*_tau_si);  // 1 - exp(-p/tau_s)
+            float rhot = _tau_s * rho;
+            return (p > 0 & p < 1e4) ?
+                _amp * expf(-t*_tau_si) * __fdividef(t + (p - t)*(1 - rho), rhot*rhot) :
+                0.0f;
         }
 
         SoftLifAlphaOperator(float m, float t, float r, float a, float g, float tau_s)
             : _amp(m), _ref(t), _rc(r), _gain7gamma(a / g), _gamma(g),
-              _tau_s(tau_s), _tau_s2inv(1.0f / (tau_s * tau_s)) {
+              _tau_s(tau_s), _tau_si(1.0f / tau_s) {
         }
     };
 
