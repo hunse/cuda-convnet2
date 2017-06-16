@@ -9,36 +9,36 @@ You should get the following output, briefly describing the command-line argumen
 
 ```
 convnet.py usage:
-    Option                             Description                                                              Default 
-    [--check-grads <0/1>           ] - Check gradients and quit?                                                [0]     
-    [--color-noise <float>         ] - Add PCA noise to color channels with given scale                         [0]     
-    [--conserve-mem <0/1>          ] - Conserve GPU memory (slower)?                                            [0]     
-    [--conv-to-local <string,...>  ] - Convert given conv layers to unshared local                              []      
-    [--epochs <int>                ] - Number of epochs                                                         [50000] 
-    [--feature-path <string>       ] - Write test data features to this path (to be used with --write-features) []      
-    [--force-save <0/1>            ] - Force save before quitting                                               [0]     
-    [--inner-size <int>            ] - Cropped DP: crop size (0 = don't crop)                                   [0]     
-    [--layer-path <string>         ] - Layer file path prefix                                                   []      
-    [--load-file <string>          ] - Load file                                                                []      
-    [--logreg-name <string>        ] - Logreg cost layer name (for --test-out)                                  []      
-    [--mini <int>                  ] - Minibatch size                                                           [128]   
-    [--multiview-test <0/1>        ] - Cropped DP: test on multiple patches?                                    [0]     
-    [--scalar-mean <float>         ] - Subtract this scalar from image (-1 = don't)                             [-1]    
-    [--test-freq <int>             ] - Testing frequency                                                        [57]    
-    [--test-one <0/1>              ] - Test on one batch at a time?                                             [1]     
-    [--test-only <0/1>             ] - Test and quit?                                                           [0]     
-    [--test-out <string>           ] - Output test case predictions to given path                               []      
-    [--unshare-weights <string,...>] - Unshare weight matrices in given layers                                  []      
-    [--write-features <string>     ] - Write test data features from given layer                                []      
-     --data-path <string>            - Data path                                                                        
-     --data-provider <string>        - Data provider                                                                    
-     --gpu <int,...>                 - GPU override                                                                     
-     --layer-def <string>            - Layer definition file                                                            
-     --layer-params <string>         - Layer parameter file                                                             
-     --save-file <string>            - Save file override                                                               
-     --save-path <string>            - Save path                                                                        
-     --test-range <int[-int]>        - Data batch range: testing                                                        
-     --train-range <int[-int]>       - Data batch range: training   
+    Option                             Description                                                              Default
+    [--check-grads <0/1>           ] - Check gradients and quit?                                                [0]
+    [--color-noise <float>         ] - Add PCA noise to color channels with given scale                         [0]
+    [--conserve-mem <0/1>          ] - Conserve GPU memory (slower)?                                            [0]
+    [--conv-to-local <string,...>  ] - Convert given conv layers to unshared local                              []
+    [--epochs <int>                ] - Number of epochs                                                         [50000]
+    [--feature-path <string>       ] - Write test data features to this path (to be used with --write-features) []
+    [--force-save <0/1>            ] - Force save before quitting                                               [0]
+    [--inner-size <int>            ] - Cropped DP: crop size (0 = don't crop)                                   [0]
+    [--layer-path <string>         ] - Layer file path prefix                                                   []
+    [--load-file <string>          ] - Load file                                                                []
+    [--logreg-name <string>        ] - Logreg cost layer name (for --test-out)                                  []
+    [--mini <int>                  ] - Minibatch size                                                           [128]
+    [--multiview-test <0/1>        ] - Cropped DP: test on multiple patches?                                    [0]
+    [--scalar-mean <float>         ] - Subtract this scalar from image (-1 = don't)                             [-1]
+    [--test-freq <int>             ] - Testing frequency                                                        [57]
+    [--test-one <0/1>              ] - Test on one batch at a time?                                             [1]
+    [--test-only <0/1>             ] - Test and quit?                                                           [0]
+    [--test-out <string>           ] - Output test case predictions to given path                               []
+    [--unshare-weights <string,...>] - Unshare weight matrices in given layers                                  []
+    [--write-features <string>     ] - Write test data features from given layer                                []
+     --data-path <string>            - Data path
+     --data-provider <string>        - Data provider
+     --gpu <int,...>                 - GPU override
+     --layer-def <string>            - Layer definition file
+     --layer-params <string>         - Layer parameter file
+     --save-file <string>            - Save file override
+     --save-path <string>            - Save path
+     --test-range <int[-int]>        - Data batch range: testing
+     --train-range <int[-int]>       - Data batch range: training
 ```
 
 You can see that most arguments have default values, so you don't have to provide them.

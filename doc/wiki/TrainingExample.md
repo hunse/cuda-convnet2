@@ -37,26 +37,26 @@ And then, when it saves a checkpoint, it also prints this:
 
 ```
 ======================Test output======================
-logprob:  5.305025, 0.938802, 0.819987 
+logprob:  5.305025, 0.938802, 0.819987
 ----------------------Averages-------------------------
-logprob:  5.305025, 0.938802, 0.819987 
-------------------------------------------------------- 
-Layer 'conv1' weights[0]: 7.898808e-03 [2.681663e-05] [3.395022e-03] 
-Layer 'conv1' biases: 2.679429e-04 [8.097122e-07] 
-Layer 'conv2' weights[0]: 7.992361e-03 [4.403163e-06] [5.509215e-04] 
-Layer 'conv2' biases: 9.996093e-01 [1.494067e-06] 
-Layer 'conv3' weights[0]: 2.364471e-02 [2.431529e-06] [1.028360e-04] 
-Layer 'conv3' biases: 7.078890e-04 [7.436417e-06] 
-Layer 'conv4' weights[0]: 2.368718e-02 [3.326350e-06] [1.404283e-04] 
-Layer 'conv4' biases: 9.992680e-01 [9.176imagenete-06] 
-Layer 'conv5' weights[0]: 2.368802e-02 [4.521301e-06] [1.908687e-04] 
-Layer 'conv5' biases: 9.988006e-01 [8.624080e-06] 
-Layer 'fc4096a' weights[0]: 7.150869e-03 [1.230828e-06] [1.721229e-04] 
-Layer 'fc4096a' biases: 9.999307e-01 [2.777610e-06] 
-Layer 'fc4096b' weights[0]: 7.796859e-03 [3.070737e-06] [3.938428e-04] 
-Layer 'fc4096b' biases: 9.987001e-01 [7.562206e-06] 
-Layer 'fc1000' weights[0]: 7.961722e-03 [5.245239e-06] [6.588071e-04] 
-Layer 'fc1000' biases: 6.999997e+00 [1.039037e-04] 
+logprob:  5.305025, 0.938802, 0.819987
+-------------------------------------------------------
+Layer 'conv1' weights[0]: 7.898808e-03 [2.681663e-05] [3.395022e-03]
+Layer 'conv1' biases: 2.679429e-04 [8.097122e-07]
+Layer 'conv2' weights[0]: 7.992361e-03 [4.403163e-06] [5.509215e-04]
+Layer 'conv2' biases: 9.996093e-01 [1.494067e-06]
+Layer 'conv3' weights[0]: 2.364471e-02 [2.431529e-06] [1.028360e-04]
+Layer 'conv3' biases: 7.078890e-04 [7.436417e-06]
+Layer 'conv4' weights[0]: 2.368718e-02 [3.326350e-06] [1.404283e-04]
+Layer 'conv4' biases: 9.992680e-01 [9.176imagenete-06]
+Layer 'conv5' weights[0]: 2.368802e-02 [4.521301e-06] [1.908687e-04]
+Layer 'conv5' biases: 9.988006e-01 [8.624080e-06]
+Layer 'fc4096a' weights[0]: 7.150869e-03 [1.230828e-06] [1.721229e-04]
+Layer 'fc4096a' biases: 9.999307e-01 [2.777610e-06]
+Layer 'fc4096b' weights[0]: 7.796859e-03 [3.070737e-06] [3.938428e-04]
+Layer 'fc4096b' biases: 9.987001e-01 [7.562206e-06]
+Layer 'fc1000' weights[0]: 7.961722e-03 [5.245239e-06] [6.588071e-04]
+Layer 'fc1000' biases: 6.999997e+00 [1.039037e-04]
 -------------------------------------------------------
 Saved checkpoint to /usr/local/storage/akrizhevsky/tmp/ConvNet__2014-07-16_14.25.04
 ======================================================= (16.188 sec)
@@ -67,7 +67,7 @@ The line underneath "Test output" is the negative label log-probability, top-1 e
 The remaining lines indicate the scales of the weights and the weight updates. For example, in the line
 
 ```
-Layer 'conv1' weights[0]: 7.898808e-03 [2.681663e-05] [3.395022e-03] 
+Layer 'conv1' weights[0]: 7.898808e-03 [2.681663e-05] [3.395022e-03]
 ```
 
 the first number is the average absolute value in the weight matrix, the second number is the average absolute value in the weight increment matrix, and the third number is the ratio of the second to the first. Monitoring these quantities is helpful when debugging convergence problems.
@@ -104,7 +104,7 @@ Eventually this will produce output that looks like this:
 
 ```
 ======================Test output======================
-logprob:  1.863741, 0.425480, 0.198100 
+logprob:  1.863741, 0.425480, 0.198100
 ```
 
 which tells you the error rate on the entire test set.
@@ -119,7 +119,7 @@ which produces output:
 
 ```
 ======================Test output======================
-logprob:  1.734335, 0.404200, 0.181500 
+logprob:  1.734335, 0.404200, 0.181500
 ```
 
 As you can see, the top-1 error rate has decreased by about 2%.
