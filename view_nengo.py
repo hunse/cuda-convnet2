@@ -30,8 +30,10 @@ kwargs['z'] = z
 if args.view:
     import matplotlib.pyplot as plt
     view(**kwargs)
-    # classification_start_time_plot(
-    #     **{k: kwargs[k] for k in ['dt', 'pt', 'labels', 't', 'y']})
+
+    from run_nengo import classification_start_time_plot
+    classification_start_time_plot(
+        **{k: kwargs[k] for k in ['dt', 'pt', 'labels', 't', 'y']})
     plt.show()
 
 if args.spikes:

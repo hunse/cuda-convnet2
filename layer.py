@@ -1584,6 +1584,7 @@ neuron_parsers = sorted([
     ParamNeuronParser('drelu[a]', 'f(x) = x - a * tanh(x / a)', uses_acts=False, uses_inputs=True),
     ParamNeuronParser('softlif[m,t,r,a,g,n]', 'f(x) = m / (t + r * log1p(1/j)) + N(0, m*n), where j = g*softrelu(a*x/g)', uses_acts=False, uses_inputs=True),
     ParamNeuronParser('softlifalpha[m,t,r,a,g,s]', 'softlif with alpha synapse noise', uses_acts=False, uses_inputs=True),
+    ParamNeuronParser('softlifalpharc[m,t,r,a,g,s]', 'softlif with alpha-RC synapse noise', uses_acts=False, uses_inputs=True),
 ], key=lambda x:x.type)
 
 # Learning rate schedules

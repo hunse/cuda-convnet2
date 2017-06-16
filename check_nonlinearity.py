@@ -47,15 +47,14 @@ class Model(object):
         # n = 3
 
         # -- initialize just like this to avoid random bugs when copying data
-        X = 0 * np.ones((n, self.dims), dtype=np.single)
-        Y = 0 * np.ones((n, 1), dtype=np.single)
+        X = 0 * np.ones((self.dims, n), dtype=np.single)
+        Y = 0 * np.ones((1, n), dtype=np.single)
 
         # x = np.linspace(-3, 10, self.dims)
         x = np.linspace(-5, 20, self.dims)
-        X[:] = x
+        X[:] = x[:, None]
 
-        all_data = [X.T, Y.T]
-
+        all_data = [X, Y]
         odims = self.layers[target]['outputs']
         self.x = x
         self.features = np.zeros((n, odims), dtype=np.single)
@@ -75,6 +74,7 @@ class Model(object):
         x = self.x
         y = self.features
         y_mean = y.mean(axis=0)
+        # print(y_mean)
         y_50 = np.percentile(y, 50, axis=0)
         y_25_75 = np.array([y_50 - np.percentile(y, 25, axis=0),
                             np.percentile(y, 75, axis=0) - y_50])
@@ -85,7 +85,8 @@ class Model(object):
         eb[-1][0].set_linestyle(':')
         plt.errorbar(x, y_50, y_25_75, fmt=None, ecolor='k')
 
-        plt.savefig('check_nonlinearity.pdf')
+        # plt.savefig('check_nonlinearity.pdf')
+        plt.show()
 
     def __enter__(self):
         lib_name = "cudaconvnet._ConvNet"
@@ -106,7 +107,8 @@ class Model(object):
 if __name__ == '__main__':
 
     # layer_def = 'layers/check-softlif.cfg'
-    layer_def = 'layers/check-softlifalpha.cfg'
+    # layer_def = 'layers/check-softlifalpha.cfg'
+    layer_def = 'layers/check-softlifalpharc.cfg'
     layer_params = 'layers/layer-params-cifar10-11pct.cfg'
 
 
