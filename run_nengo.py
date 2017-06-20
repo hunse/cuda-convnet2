@@ -233,17 +233,17 @@ def run(loadfile, savefile=None, histload=None, count_spikes=False,
     # presentation_time = 0.05
     # presentation_time = 0.06
     # presentation_time = 0.08
-    # presentation_time = 0.1
+    presentation_time = 0.1
     # presentation_time = 0.13
-    presentation_time = 0.15
+    # presentation_time = 0.15
     # presentation_time = 0.2
 
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.001)
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.005)
-    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.001)
+    network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.001)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.002)
-    network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.003)
+    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.003)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.004)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
 
@@ -348,7 +348,7 @@ def error(dt, pt, labels, t, y, method='mean'):
     # s = nengo.synapses.Alpha(0.002)  # 30ms_pt-0ms_alpha
     # s = nengo.synapses.Alpha(0.004)
     # s = nengo.synapses.Alpha(0.005)
-    s = nengo.synapses.Alpha(0.01)
+    # s = nengo.synapses.Alpha(0.01)
     # s = nengo.synapses.Alpha(0.02)
     # y = nengo.synapses.filt(y, s, dt)
     # y = nengo.synapses.filtfilt(y, s, dt)
