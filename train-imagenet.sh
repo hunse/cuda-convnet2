@@ -9,7 +9,6 @@ OPTS=(--save-path ./checkpoints)
 
 ### one GPU
 #LAYERS=(--layer-def ./layers/layers-imagenet-1gpu.cfg)
-#LAYERS+=(--layer-params ./layers/layer-params-imagenet-1gpu.cfg)
 #DATA+=(--mini 128)
 #OPTS+=(--gpu 3)
 
@@ -17,8 +16,8 @@ OPTS=(--save-path ./checkpoints)
 #LAYERS=(--layer-def ./layers/layers-imagenet-4gpu-data.cfg)
 #LAYERS=(--layer-def ./layers/layers-imagenet-4gpu-data-relu.cfg)
 #LAYERS=(--layer-def ./layers/layers-imagenet-4gpu-data-lif.cfg)
-#LAYERS=(--layer-def ./layers/layers-imagenet-4gpu-data-lifsoft.cfg)
-#LAYERS+=(--layer-params ./layers/layer-params-imagenet-4gpu-data.cfg)
+LAYERS=(--layer-def ./layers/layers-imagenet-4gpu-data-lifalpharc.cfg)
+
 DATA+=(--mini 512)
 OPTS+=(--gpu 3,2,1,0)
 
@@ -39,8 +38,8 @@ else
     OPTS+=(--save-file "$savefile")
 fi
 
-python convnet.py "${DATA[@]}" "${OPTS[@]}" \
-    --layer-def ./layers/layers-imagenet-4gpu-data-lif.cfg \
+### start with small learning rate to get good initial params
+python convnet.py "${DATA[@]}" "${OPTS[@]}" "${LAYERS[@]}" \
     --layer-params ./layers/layer-params-imagenet-4gpu-data-smallrate.cfg \
     --train-range 0-25 --test-range 1000-1016 --test-freq 26 --epochs 1
 #    --train-range 0-417 --test-range 1000-1016 --test-freq 201 --epochs 1
