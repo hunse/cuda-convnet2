@@ -47,24 +47,20 @@ def compute_layer(layer, inputs, data):
             return 1. / (1 + np.exp(-x))
         if ntype == 'relu':
             return np.maximum(0, x)
-        if ntype == 'softlif':
+        if ntype.startswith('softlif'):  # includes softlifalpha and softlifalpharc
             params = neuron['params']
             if 't' not in params:
                 print("WARNING: using default neuron params")
-                tau_ref = 0.001
-                tau_rc = 0.05
-                alpha = 0.825
-                amp = 0.063
+                tau_ref, tau_rc, alpha, amp = (0.001, 0.05, 0.825, 0.063)
                 sigma = params.get('g', params.get('a', None))
-                noise = params.get('n', 0.0)
             else:
-                tau_ref, tau_rc, alpha, amp, sigma, noise = [
-                    np.array(params[k], dtype=np.float32)
-                    for k in ['t', 'r', 'a', 'm', 'g', 'n']]
+                tau_ref, tau_rc, alpha, amp, sigma = [
+                    params[k] for k in ['t', 'r', 'a', 'm', 'g']]
 
             lif = SoftLIFRate(sigma=sigma, tau_rc=tau_rc, tau_ref=tau_ref)
-            bias = np.ones_like(alpha)
-            r = amp * lif.rates(x.astype(np.float32), alpha, bias)
+            bias = 1.
+            r = amp * lif.rates(x, alpha, bias)
+            # r = amp * lif.rates(x.astype(np.float32), np.float32(alpha), np.float32(bias))
             return r
         raise NotImplementedError(ntype)
     if layer['type'] == 'softmax':

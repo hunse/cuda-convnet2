@@ -98,15 +98,9 @@ def build_layer(layer, inputs, data, hist=None, pt=None):
             params = neuron['params']
             if 't' not in params:
                 print("Warning: Using default neuron params")
-                tau_ref = 0.001
-                tau_rc = 0.05
-                alpha = 0.825
-                amp = 0.063
+                tau_ref, tau_rc, alpha, amp = (0.001, 0.05, 0.825, 0.063)
                 sigma = params.get('g', params.get('a', None))
-                # noise = params.get('n', 0.0)
             else:
-                # tau_ref, tau_rc, alpha, amp, sigma, noise = [
-                #     params[k] for k in ['t', 'r', 'a', 'm', 'g', 'n']]
                 tau_ref, tau_rc, alpha, amp, sigma = [
                     params[k] for k in ['t', 'r', 'a', 'm', 'g']]
 
@@ -233,19 +227,19 @@ def run(loadfile, savefile=None, histload=None, count_spikes=False,
     # presentation_time = 0.05
     # presentation_time = 0.06
     # presentation_time = 0.08
-    presentation_time = 0.1
+    # presentation_time = 0.1
     # presentation_time = 0.13
     # presentation_time = 0.15
-    # presentation_time = 0.2
+    presentation_time = 0.2
 
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.001)
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.005)
-    network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.001)
+    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.001)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.002)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.003)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.004)
-    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
+    network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
 
     outputs = build_target_layer(
         'logprob', layers, data, network, hists=hists, pt=presentation_time)
