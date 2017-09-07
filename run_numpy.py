@@ -5,9 +5,9 @@ import numpy as np
 os.environ['THEANO_FLAGS'] = 'floatX=float32'
 import theano
 import theano.tensor as tt
+import theano.tensor.signal.pool  # noqa: 401
 # dtype = theano.config.floatX
 
-# from convnet import ConvNet
 from run_core import load_network, SoftLIFRate, round_layer
 
 
@@ -77,7 +77,6 @@ def compute_layer(layer, inputs, data):
 
     if layer['type'] == 'conv':
         assert layer['sharedBiases']
-
         n = x.shape[0]
         nc = layer['channels'][0]
         nx = layer['imgSize'][0]
@@ -86,99 +85,77 @@ def compute_layer(layer, inputs, data):
         s = layer['filterSize'][0]
         st = layer['stride'][0]
         p = -layer['padding'][0]  # Alex makes -ve in layer.py (why?)
-        assert x.shape[1:] == (nc, nx, nx)
+        filters = layer['weights'][0].reshape(nc, s, s, nf)
+        filters = np.rollaxis(filters, axis=-1, start=0)
+        biases = layer['biases'].reshape(1, nf, 1, 1)
+        assert x.shape == (n, nc, nx, nx)
 
         nx2 = (ny - 1) * st + s
         xpad = np.zeros((n, nc, nx2, nx2), dtype=x.dtype)
         xpad[:, :, p:p+nx, p:p+nx] = x
         x = xpad
 
-        filters = layer['weights'][0].reshape(nc, s, s, nf)
-        filters = np.rollaxis(filters, axis=-1, start=0)
-        filters = filters[:, :, ::-1, ::-1]  # flip, since conv2d flips back
-        biases = layer['biases'].reshape(1, nf, 1, 1)
-
         sx = tt.tensor4()
         sy = tt.nnet.conv2d(
-            sx, filters, image_shape=x.shape, filter_shape=filters.shape,
-            subsample=(st, st), border_mode='valid')
+            sx, filters, input_shape=x.shape, filter_shape=filters.shape,
+            subsample=(st, st), border_mode='valid', filter_flip=False)
         sy = sy + biases
         f = theano.function([sx], sy)
-
         y = f(x)
 
         print("Abs filters (mean, std, max) %s %s %s" % (
             abs(filters).mean(), abs(filters).std(), abs(filters).max()))
         print("Abs biases (mean, std, max) %s %s %s" % (
             abs(biases).mean(), abs(biases).std(), abs(biases).max()))
+        assert y.shape == (n, nf, ny, ny)
 
-        assert y.shape[1:] == (nf, ny, ny)
         return y
 
     if layer['type'] == 'local':
         n = x.shape[0]
         nc = layer['channels'][0]
-        nx = layer['imgSize'][0]
-        ny = layer['modulesX']
+        nxi = nxj = layer['imgSize'][0]
+        nyi = nyj = layer['modulesX']
         nf = layer['filters']
-        s = layer['filterSize'][0]
-        st = layer['stride'][0]
-        p = -layer['padding'][0]  # Alex makes -ve in layer.py (why?)
-        assert x.shape[1:] == (nc, nx, nx)
+        si = sj = layer['filterSize'][0]
+        sti = stj = layer['stride'][0]
+        pi = pj = -layer['padding'][0]  # Alex makes -ve in layer.py (why?)
+        assert x.shape == (n, nc, nxi, nxj)
 
-        filters = layer['weights'][0].reshape(ny, ny, nc, s, s, nf)
+        filters = layer['weights'][0].reshape(nyi, nyj, nc, si, sj, nf)
         filters = np.rollaxis(filters, axis=-1, start=0)
-        biases = layer['biases'][0].reshape(1, 1, 1, 1)
+        biases = layer['biases'].reshape(1, nf, nyi, nyj)
 
-        y = np.zeros((n, nf, ny, ny), dtype=x.dtype)
-        for i in range(ny):
-            for j in range(ny):
-                xi0, xj0 = st*i-p, st*j-p
-                xi1, xj1 = xi0+s, xj0+s
-                w = filters[:, i, j, :, max(-xi0, 0):min(nx+s-xi1, s),
-                                        max(-xj0, 0):min(nx+s-xj1, s)]
-                xij = x[:, :, max(xi0, 0):min(xi1, nx), max(xj0, 0):min(xj1, nx)]
-                y[:, :, i, j] = np.dot(xij.reshape(n, -1), w.reshape(nf, -1).T)
+        y = np.zeros((n, nf, nyi, nyj), dtype=x.dtype)
+        for i in range(nyi):
+            for j in range(nyj):
+                i0, j0 = i*sti - pi, j*stj - pj
+                i1, j1 = i0 + si, j0 + sj
+                sli = slice(max(-i0, 0), min(nxi + si - i1, si))
+                slj = slice(max(-j0, 0), min(nxj + sj - j1, sj))
+                w = filters[:, i, j, :, sli, slj].reshape(nf, -1)
+                xij = x[:, :, max(i0, 0):min(i1, nxi), max(j0, 0):min(j1, nxj)]
+                y[:, :, i, j] = np.dot(xij.reshape(n, -1), w.T)
 
         y += biases
+
         return y
 
     if layer['type'] == 'pool':
-        assert x.shape[-2] == x.shape[-1]
         assert layer['start'] == 0
-        pool = layer['pool']
         n = x.shape[0]
         nc = layer['channels']
-        nx = layer['imgSize']
-        ny = layer['outputsX']
+        nxi = nxj = layer['imgSize']
+        nyi = nyj = layer['outputsX']
         st, s = layer['stride'], layer['sizeX']
-        assert x.shape == (n, nc, nx, nx)
+        mode = dict(max='max', avg='average_exc_pad')[layer['pool']]
+        assert x.shape == (n, nc, nxi, nxj)
 
-        nx2 = ny * st
-        y = x[:, :, 0:nx2:st, 0:nx2:st].copy()
-        c = np.ones((ny, ny))
-        assert y.shape == (n, nc, ny, ny)
-
-        for i in range(0, s):
-            for j in range(0, s):
-                if i == 0 and j == 0:
-                    continue
-
-                nxi = min(nx2 + i, nx)
-                nxj = min(nx2 + j, nx)
-                nyi = (nx - i - 1) / st + 1
-                nyj = (nx - j - 1) / st + 1
-                xij, yij = x[:, :, i:nxi:st, j:nxj:st], y[:, :, :nyi, :nyj]
-                if pool == 'max':
-                    yij[...] = np.maximum(yij, xij)
-                elif pool == 'avg':
-                    yij += xij
-                    c[:nyi, :nyj] += 1
-                else:
-                    raise NotImplementedError(pool)
-
-        if pool == 'avg':
-            y /= c
+        sx = tt.tensor4()
+        sy = tt.signal.pool.pool_2d(
+            sx, (s, s), ignore_border=False, st=(st, st), mode=mode)
+        f = theano.function([sx], sy)
+        y = f(x)
 
         return y
 
@@ -234,7 +211,6 @@ if __name__ == '__main__':
         for i in range(10):
             plt.subplot(2, 5, i+1)
             plt.imshow(pimages[i], vmin=0, vmax=1)
-            # plt.imshow(pimages[i], vmin=0, vmax=1)
 
         plt.show()
 
@@ -249,7 +225,7 @@ if __name__ == '__main__':
             name, output.mean(), output.std(), output.min(), output.max()))
 
     print_acts('probs')
-    print(outputs['logprob'])
+    print("logprob: %10.6f, top-1: %0.6f, top-5: %0.6f" % outputs['logprob'])
 
     if args.histsave is not None:
         hist_dict = {}
@@ -263,6 +239,5 @@ if __name__ == '__main__':
                 hist_acts(parent)
 
         hist_acts('probs')
-        # print(hist_dict)
         np.savez(args.histsave, **hist_dict)
         print("Saved %r" % args.histsave)
