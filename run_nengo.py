@@ -200,7 +200,8 @@ def build_target_layer(target_key, layers, data, network, outputs=None, hists=No
 
 
 def run(loadfile, savefile=None, histload=None, count_spikes=False,
-        n_max=None, backend='nengo', ocl_profile=False):
+        n_max=None, backend='nengo', ocl_profile=False,
+        presentation_time=None, synapse_type=None, synapse_tau=None):
 
     if backend == 'nengo':
         Simulator = nengo.Simulator
@@ -230,7 +231,17 @@ def run(loadfile, savefile=None, histload=None, count_spikes=False,
     # presentation_time = 0.1
     # presentation_time = 0.13
     # presentation_time = 0.15
-    presentation_time = 0.2
+    # presentation_time = 0.2
+
+    synapse = None
+    if synapse_type == 'lowpass':
+        synapse = nengo.synapses.Lowpass(synapse_tau)
+    elif synapse_type == 'alpha':
+        synapse = nengo.synapses.Alpha(synapse_tau)
+    else:
+        raise ValueError("synapse type: %r" % synapse_type)
+
+    network.config[nengo.Connection].synapse = synapse
 
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
     # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.001)
@@ -239,7 +250,7 @@ def run(loadfile, savefile=None, histload=None, count_spikes=False,
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.002)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.003)
     # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.004)
-    network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
+    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
 
     outputs = build_target_layer(
         'logprob', layers, data, network, hists=hists, pt=presentation_time)

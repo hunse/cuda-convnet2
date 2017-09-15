@@ -42,20 +42,26 @@ def compute_layer(layer, inputs, data):
         neuron = layer['neuron']
         ntype = neuron['type']
         if ntype == 'ident':
+            print('  %s' % ntype)
             return x.copy()
         if ntype == 'logistic':
+            print('  %s' % ntype)
             return 1. / (1 + np.exp(-x))
         if ntype == 'relu':
+            print('  %s' % ntype)
             return np.maximum(0, x)
         if ntype.startswith('softlif'):  # includes softlifalpha and softlifalpharc
             params = neuron['params']
+            print('  %s(%s)' % (ntype, ', '.join(
+                '%s=%0.3f' % (k, v) for k, v in params.items())))
+
             if 't' not in params:
                 print("WARNING: using default neuron params")
                 tau_ref, tau_rc, alpha, amp = (0.001, 0.05, 0.825, 0.063)
                 sigma = params.get('g', params.get('a', None))
             else:
-                tau_ref, tau_rc, alpha, amp, sigma = [
-                    params[k] for k in ['t', 'r', 'a', 'm', 'g']]
+                tau_ref, tau_rc, alpha, amp, sigma = (
+                    params[k] for k in ('t', 'r', 'a', 'm', 'g'))
 
             lif = SoftLIFRate(sigma=sigma, tau_rc=tau_rc, tau_ref=tau_ref)
             bias = 1.
@@ -153,7 +159,7 @@ def compute_layer(layer, inputs, data):
 
         sx = tt.tensor4()
         sy = tt.signal.pool.pool_2d(
-            sx, (s, s), ignore_border=False, st=(st, st), mode=mode)
+            sx, (s, s), ignore_border=False, stride=(st, st), mode=mode)
         f = theano.function([sx], sy)
         y = f(x)
 
