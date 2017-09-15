@@ -127,10 +127,15 @@ def count(loadfile, histfile=None):
                 print("  %s: %s" % (k, counts[key][k]))
 
     print("totals:")
-    keys = ['n_weights', 'n_synapses', 'n_full', 'n_neurons', 'flops']
+    #keys = ['n_neurons', 'n_weights', 'n_synapses', 'n_full', 'flops']
+    keys = ['n_neurons', 'n_weights', 'n_synapses', 'flops']
+    summary = []
     for key in keys:
         entries = [counts[lk][key] for lk in layer_keys if key in counts[lk]]
-        print("  %s: %s -> %s" % (key, entries, sum(entries)))
+        summary.append(sum(entries))
+        print("  %s: %s -> %s" % (key, entries, summary[-1]))
+
+    print("%s: %s" % (', '.join(keys), ' & '.join('%d' % s for s in summary)))
 
 
 if __name__ == '__main__':
