@@ -33,15 +33,16 @@ class NetworkType(object):
         networks = [Network(self, s.split('_')[1]) for s in files]
         return networks
 
-    def new_network(self):
-        return Network(self)
+    def new_network(self, **kwargs):
+        return Network(self, **kwargs)
 
 
 class Network(object):
-    def __init__(self, network_type, timestamp=None):
+    def __init__(self, network_type, timestamp=None, seed=None):
         self.network_type = network_type
         self.timestamp = (
             timestamp or datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S'))
+        self.seed = np.random.randint(2**30) if seed is None else seed
 
         self.numpy = None
         self.nengo = {}
@@ -150,6 +151,7 @@ def train_block(network, **kwargs):
     sys.stdout = open(log_path, 'a')
     convnet = None
     try:
+        np.random.seed(network.seed)
         op, load_dic = network.get_op(**kwargs)
         convnet = ConvNet(op, load_dic)
         convnet.train()
@@ -227,6 +229,7 @@ network_types = [
 
 nengo_types = [
     (0.15, 'alpha', 0.000, 6./15),
+    (0.15, 'alpha', 0.000, 1./15),
     (0.15, 'alpha', 0.001, 6./15),
     (0.15, 'alpha', 0.003, 6./15),
     (0.20, 'alpha', 0.005, 10./20),
@@ -240,20 +243,25 @@ for network_type in network_types:
     networks = network_type.filter_checkpoints()
     for network in networks:
         network.load_numpy()
-        print('  %s: %s' % (network, network.numpy))
+        # print('  %s: %s' % (network, network.numpy))
 
     for network in networks:
         for pt, synapse_type, synapse_tau, ct_start in nengo_types:
             network.load_nengo(pt, synapse_type, synapse_tau, ct_start)
-        for vals in nengo_types:
-            print('  %s: %s' % (network, network.nengo[vals]))
+        # for vals in nengo_types:
+        #     print('  %s: %s' % (network, network.nengo[vals]))
 
     # --- print result summaries
-    top1mean = np.mean([n.numpy[1] for n in networks])
-    #top5mean = np.mean([n.numpy[2] for n in networks])
-    print('%s: %0.4f' % (network_type, top1mean))
+    top1mean = 100*np.mean([n.numpy[1] for n in networks])
+    #top5mean = 100*np.mean([n.numpy[2] for n in networks])
+    top1min = 100*np.min([n.numpy[1] for n in networks])
+    top1mini = np.argmin([n.numpy[1] for n in networks])
+    print('%s: %0.2f (min %0.2f [%d])' % (
+        network_type, top1mean, top1min, top1mini))
     for key in nengo_types:
-        top1mean = np.mean([n.nengo[key][0] for n in networks])
-        #top5mean = np.mean([n.nengo[key][1] for n in networks])
-        strf = (network_type,) + key + (top1mean,)
-        print('%s %0.3f %s(%0.3f) %0.3f: %0.4f' % strf)
+        top1mean = 100*np.mean([n.nengo[key][0] for n in networks])
+        #top5mean = 100*np.mean([n.nengo[key][1] for n in networks])
+        top1min = 100*np.min([n.nengo[key][0] for n in networks])
+        top1mini = np.argmin([n.nengo[key][0] for n in networks])
+        strf = (network_type,) + key + (top1mean, top1min, top1mini)
+        print('%s %0.3f %s(%0.3f) %0.3f: %0.2f (min %0.2f [%d])' % strf)
