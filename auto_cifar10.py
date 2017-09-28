@@ -17,6 +17,10 @@ assert os.path.exists(save_dir)
 real_stdout = sys.stdout
 real_stderr = sys.stderr
 
+epoch_max_time = 5  # 5 sec per train epoch, typically around 1 sec on good GPU
+numpy_max_time = 600  # 10 min, works for the 10000 examples of CIFAR-10
+nengo_max_time = 10000  # ~3h, works for the 10000 examples of CIFAR-10 on GPU
+
 
 class Logger(object):
     def __init__(self, logpath, terminal=real_stdout):
@@ -173,7 +177,7 @@ def run_process(function, args=(), kwargs={}, max_time=None):
     t0 = time.time()
     while p.is_alive():
         if max_time and (time.time() - t0) > max_time:
-            print("KILLING")
+            print("Process timeout (allotted time %0.1f s)" % max_time)
             p.join(timeout=10)
             if p.is_alive():
                 p.terminate()
@@ -258,7 +262,7 @@ def train(network):
         s = run_process(train_proc, args=(network,), kwargs=dict(
             n_epochs=n_epochs, params_file=params_file,
             train_range=train_range, test_range=test_range),
-                        max_time=5*n_epochs + 60)
+                        max_time=epoch_max_time*n_epochs + 60)
         if s is None:
             # remove checkpoint file
             path = os.path.join(save_dir, network.checkpoint_name())
@@ -270,13 +274,13 @@ def train(network):
 
 
 def test_numpy(network):
-    run_process(test_numpy_proc, args=(network,), max_time=200)
+    run_process(test_numpy_proc, args=(network,), max_time=numpy_max_time)
 
 
 def test_nengo(network, pres_time, synapse_type, synapse_tau):
     run_process(test_nengo_proc,
                 args=(network, pres_time, synapse_type, synapse_tau),
-                max_time=200)
+                max_time=nengo_max_time)
 
 
 logpath = os.path.join(save_dir, "auto_cifar10_%s.log" % (
