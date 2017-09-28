@@ -1,8 +1,9 @@
 import datetime
+import multiprocessing
 import os
 import sys
 import time
-import multiprocessing
+import traceback
 
 import numpy as np
 
@@ -12,7 +13,42 @@ import run_nengo
 
 
 save_dir = os.path.join('checkpoints', 'auto-cifar10')
-checkpoint_files = os.listdir(save_dir)
+assert os.path.exists(save_dir)
+real_stdout = sys.stdout
+real_stderr = sys.stderr
+
+
+class Logger(object):
+    def __init__(self, logpath, terminal=real_stdout):
+        self.terminal = terminal
+        self.log = open(logpath, 'a')
+
+    def close(self):
+        # self.terminal.close()
+        self.log.close()
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+
+def reset_std(kind, default=None):
+    def flushclose(stream):
+        stream.write("\n")  # end any pending lines to ensure flush
+        stream.flush()
+        stream.close()
+
+    kind = kind.lower()
+    if 'out' in kind:
+        flushclose(sys.stdout)
+        sys.stdout = real_stdout if default is None else default
+    if 'err' in kind:
+        flushclose(sys.stderr)
+        sys.stderr = real_stderr if default is None else default
 
 
 class NetworkType(object):
@@ -59,7 +95,8 @@ class Network(object):
 
     def nengo_name(self, pres_time, synapse_type, synapse_tau):
         return '%s_%dms-pt_%dms-%s.npz' % (
-            self.checkpoint_name(), 1000*pres_time, 1000*synapse_tau, synapse_type)
+            self.checkpoint_name(),
+            1000*pres_time, 1000*synapse_tau, synapse_type)
 
     def get_op(self, n_epochs=None, params_file=None,
                train_range='1-5', test_range='6'):
@@ -69,7 +106,8 @@ class Network(object):
         for option in op.get_options_list():
             option.set_default()
 
-        op.set_value('data_path', os.path.expanduser('~/data/cifar-10-py-colmajor/'))
+        op.set_value('data_path',
+                     os.path.expanduser('~/data/cifar-10-py-colmajor/'))
         op.set_value('dp_type', 'cifar')
         op.set_value('inner_size', '24')
 
@@ -78,7 +116,8 @@ class Network(object):
 
         op.set_value('layer_path', 'layers/')
         op.set_value('layer_def', self.network_type.layer_file)
-        op.set_value('layer_params', params_file or self.network_type.layer_params_file)
+        op.set_value('layer_params',
+                     params_file or self.network_type.layer_params_file)
 
         op.set_value('train_batch_range', train_range)
         op.set_value('test_batch_range', test_range)
@@ -127,7 +166,8 @@ def run_process(function, args=(), kwargs={}, max_time=None):
         q.put(function(*args, **kwargs))
 
     q = multiprocessing.Queue()
-    p = multiprocessing.Process(target=wrapper, args=(q,) + args, kwargs=kwargs)
+    p = multiprocessing.Process(
+        target=wrapper, args=(q,) + args, kwargs=kwargs)
 
     p.start()
     t0 = time.time()
@@ -145,7 +185,7 @@ def run_process(function, args=(), kwargs={}, max_time=None):
         return None
 
 
-def train_block(network, **kwargs):
+def train_proc(network, **kwargs):
     log_path = os.path.join(save_dir, network.checkpoint_name() + '.log')
     real_stdout = sys.stdout
     sys.stdout = open(log_path, 'a')
@@ -157,16 +197,53 @@ def train_block(network, **kwargs):
         convnet.train()
         return True
     except RuntimeError:
+        print(traceback.format_exc())
         if convnet:
             print("\nerrored at epoch %d" % (convnet.epoch))
+    except:
+        print(traceback.format_exc())
     finally:
         if convnet:
             convnet.destroy_model_lib()
 
-        print("\n")  # end any pending lines to ensure flush
-        sys.stdout.flush()
-        sys.stdout.close()
-        sys.stdout = real_stdout
+        reset_std('out', real_stdout)
+
+
+def test_numpy_proc(network):
+    save_path = os.path.join(save_dir, network.numpy_name())
+    log_path = save_path + '.log'
+    real_stdout = sys.stdout
+    sys.stdout = open(log_path, 'a')
+    try:
+        checkpoint_path = os.path.join(save_dir, network.checkpoint_name())
+        layers, data, dp = run_numpy.load_network(checkpoint_path)
+        outputs = run_numpy.compute_target_layer('logprob', layers, data)
+        logprob, top1, top5 = outputs['logprob']
+        np.savez(save_path, logprob=logprob, top1=top1, top5=top5)
+    except:
+        print(traceback.format_exc())
+        print("Skipping run_numpy(%s)" % network)
+    finally:
+        reset_std('out', real_stdout)
+
+
+def test_nengo_proc(network, pres_time, synapse_type, synapse_tau):
+    checkpoint_path = os.path.join(save_dir, network.checkpoint_name())
+    save_path = os.path.join(save_dir, network.nengo_name(
+        pres_time, synapse_type, synapse_tau))
+    log_path = save_path + '.log'
+    real_stdout = sys.stdout
+    sys.stdout = open(log_path, 'a')
+    try:
+        run_nengo.run(checkpoint_path, savefile=save_path, backend='nengo_ocl',
+                      presentation_time=pres_time,
+                      synapse_type=synapse_type, synapse_tau=synapse_tau)
+    except:
+        print(traceback.format_exc())
+        print("Skipping run_nengo(%s, %s, %s, %s)" % (
+            network, pres_time, synapse_type, synapse_tau))
+    finally:
+        reset_std('out', real_stdout)
 
 
 def train(network):
@@ -178,90 +255,85 @@ def train(network):
     )
 
     for n_epochs, params_file, train_range, test_range in blocks:
-        s = run_process(train_block, args=(network,), kwargs=dict(
+        s = run_process(train_proc, args=(network,), kwargs=dict(
             n_epochs=n_epochs, params_file=params_file,
             train_range=train_range, test_range=test_range),
-        max_time=5*n_epochs + 60)
+                        max_time=5*n_epochs + 60)
         if s is None:
+            # remove checkpoint file
+            path = os.path.join(save_dir, network.checkpoint_name())
+            if os.path.exists(path):
+                print("Error during training, removing %r" % path)
+                os.remove(path)
+
             break
 
 
 def test_numpy(network):
-    try:
-        checkpoint_path = os.path.join(save_dir, network.checkpoint_name())
-        layers, data, dp = run_numpy.load_network(checkpoint_path)
-        outputs = run_numpy.compute_target_layer('logprob', layers, data)
-        logprob, top1, top5 = outputs['logprob']
-
-        numpy_path = os.path.join(save_dir, network.numpy_name())
-        np.savez(numpy_path, logprob=logprob, top1=top1, top5=top5)
-    except Exception as e:
-        print(e)
-        print("Skipping run_numpy(%s)" % network)
+    run_process(test_numpy_proc, args=(network,), max_time=200)
 
 
 def test_nengo(network, pres_time, synapse_type, synapse_tau):
-    try:
-        checkpoint_path = os.path.join(save_dir, network.checkpoint_name())
-        save_path = os.path.join(save_dir, network.nengo_name(
-            pres_time, synapse_type, synapse_tau))
-
-        run_nengo.run(checkpoint_path, savefile=save_path, backend='nengo_ocl',
-                      presentation_time=pres_time,
-                      synapse_type=synapse_type, synapse_tau=synapse_tau)
-    except Exception as e:
-        print(e)
-        print("Skipping run_nengo(%s, %s, %s, %s)" % (
-            network, pres_time, synapse_type, synapse_tau))
+    run_process(test_nengo_proc,
+                args=(network, pres_time, synapse_type, synapse_tau),
+                max_time=200)
 
 
-n_trials = 5
+logpath = os.path.join(save_dir, "auto_cifar10_%s.log" % (
+    datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S')))
+sys.stdout = Logger(logpath)
+try:
+    n_trials = 5
 
-network_types = [
-    NetworkType('lif', 'layers-cifar10-lif.cfg'),
-    NetworkType('lifalpha', 'layers-cifar10-lifalpha-3ms.cfg'),
-    NetworkType('lifalpha5ms', 'layers-cifar10-lifalpha-5ms.cfg'),
-    NetworkType('lifalpharc', 'layers-cifar10-lifalpharc.cfg'),
-    NetworkType('lifalpharc5ms', 'layers-cifar10-lifalpharc-5ms.cfg'),
-    NetworkType('lifnoise10', 'layers-cifar10-lif-noise10.cfg'),
-    NetworkType('lifnoise20', 'layers-cifar10-lif-noise20.cfg'),
-]
+    network_types = [
+        NetworkType('lif', 'layers-cifar10-lif.cfg'),
+        NetworkType('lifalpha', 'layers-cifar10-lifalpha-3ms.cfg'),
+        NetworkType('lifalpha5ms', 'layers-cifar10-lifalpha-5ms.cfg'),
+        NetworkType('lifalpharc', 'layers-cifar10-lifalpharc.cfg'),
+        NetworkType('lifalpharc5ms', 'layers-cifar10-lifalpharc-5ms.cfg'),
+        NetworkType('lifnoise10', 'layers-cifar10-lif-noise10.cfg'),
+        NetworkType('lifnoise20', 'layers-cifar10-lif-noise20.cfg'),
+    ]
 
-nengo_types = [
-    (0.15, 'alpha', 0.000, 6./15),
-    (0.15, 'alpha', 0.000, 1./15),
-    (0.15, 'alpha', 0.001, 6./15),
-    (0.15, 'alpha', 0.003, 6./15),
-    (0.20, 'alpha', 0.005, 10./20),
-]
+    nengo_types = [
+        (0.15, 'alpha', 0.000, 6./15),
+        (0.15, 'alpha', 0.000, 1./15),
+        (0.15, 'alpha', 0.001, 6./15),
+        (0.15, 'alpha', 0.003, 6./15),
+        (0.20, 'alpha', 0.005, 10./20),
+    ]
 
-for network_type in network_types:
-    networks = network_type.filter_checkpoints()
-    for _ in range(len(networks), n_trials):
-        train(network_type.new_network())
+    for network_type in network_types:
+        networks = network_type.filter_checkpoints()
+        for _ in range(len(networks), n_trials):
+            train(network_type.new_network())
 
-    networks = network_type.filter_checkpoints()
-    for network in networks:
-        network.load_numpy()
-        # print('  %s: %s' % (network, network.numpy))
+        networks = network_type.filter_checkpoints()
+        for network in networks:
+            network.load_numpy()
+            # print('  %s: %s' % (network, network.numpy))
 
-    for network in networks:
-        for pt, synapse_type, synapse_tau, ct_start in nengo_types:
-            network.load_nengo(pt, synapse_type, synapse_tau, ct_start)
-        # for vals in nengo_types:
-        #     print('  %s: %s' % (network, network.nengo[vals]))
+        for network in networks:
+            for pt, synapse_type, synapse_tau, ct_start in nengo_types:
+                network.load_nengo(pt, synapse_type, synapse_tau, ct_start)
+            # for vals in nengo_types:
+            #     print('  %s: %s' % (network, network.nengo[vals]))
 
-    # --- print result summaries
-    top1mean = 100*np.mean([n.numpy[1] for n in networks])
-    #top5mean = 100*np.mean([n.numpy[2] for n in networks])
-    top1min = 100*np.min([n.numpy[1] for n in networks])
-    top1mini = np.argmin([n.numpy[1] for n in networks])
-    print('%s: %0.2f (min %0.2f [%d])' % (
-        network_type, top1mean, top1min, top1mini))
-    for key in nengo_types:
-        top1mean = 100*np.mean([n.nengo[key][0] for n in networks])
-        #top5mean = 100*np.mean([n.nengo[key][1] for n in networks])
-        top1min = 100*np.min([n.nengo[key][0] for n in networks])
-        top1mini = np.argmin([n.nengo[key][0] for n in networks])
-        strf = (network_type,) + key + (top1mean, top1min, top1mini)
-        print('%s %0.3f %s(%0.3f) %0.3f: %0.2f (min %0.2f [%d])' % strf)
+        # --- print result summaries
+        top1mean = 100*np.mean([n.numpy[1] for n in networks])
+        # top5mean = 100*np.mean([n.numpy[2] for n in networks])
+        top1min = 100*np.min([n.numpy[1] for n in networks])
+        top1mini = np.argmin([n.numpy[1] for n in networks])
+        print('%s: %0.2f (min %0.2f [%d])' % (
+            network_type, top1mean, top1min, top1mini))
+        for key in nengo_types:
+            top1mean = 100*np.mean([n.nengo[key][0] for n in networks])
+            # top5mean = 100*np.mean([n.nengo[key][1] for n in networks])
+            top1min = 100*np.min([n.nengo[key][0] for n in networks])
+            top1mini = np.argmin([n.nengo[key][0] for n in networks])
+            strf = (network_type,) + key + (top1mean, top1min, top1mini)
+            print('%s %0.3f %s(%0.3f) %0.3f: %0.2f (min %0.2f [%d])' % strf)
+except:
+    print(traceback.format_exc())
+finally:
+    reset_std('out')
