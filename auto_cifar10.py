@@ -7,10 +7,6 @@ import traceback
 
 import numpy as np
 
-from convnet import ConvNet
-import run_numpy
-import run_nengo
-
 
 save_dir = os.path.join('checkpoints', 'auto-cifar10')
 assert os.path.exists(save_dir)
@@ -53,6 +49,39 @@ def reset_std(kind, default=None):
     if 'err' in kind:
         flushclose(sys.stderr)
         sys.stderr = real_stderr if default is None else default
+
+
+def error_lims(dt, pt, labels, t, y, method='mean', ct_start=0., ct_end=1.):
+    """Stolen from run_nengo so we don't have to import it here"""
+    assert ct_start < ct_end
+    cn0 = int(np.floor(ct_start * pt / dt))
+    cn1 = int(np.ceil(ct_end * pt / dt))
+    pn = int(pt / dt)
+    n = y.shape[0] / pn
+    assert cn0 >= 0
+    assert cn1 <= pn
+    assert cn0 < cn1
+
+    # blocks to be used for classification
+    blocks = y.reshape(n, pn, y.shape[1])[:, cn0:cn1, :]
+
+    if method == 'mean':
+        probs = blocks.mean(1)
+    elif method == 'peak':
+        probs = blocks.max(1)
+    else:
+        raise ValueError("Unrecognized method %r" % method)
+
+    labels = labels[:n]
+    assert probs.shape[0] == labels.shape[0]
+    inds = np.argsort(probs, axis=1)
+    top1errors = inds[:, -1] != labels
+    top5errors = np.all(inds[:, -5:] != labels[:, None], axis=1)
+
+    z_labels = labels[(t / pt).astype(int) % len(labels)]
+    z = np.argmax(y, axis=1) != z_labels
+
+    return top1errors, top5errors, z
 
 
 class NetworkType(object):
@@ -104,6 +133,7 @@ class Network(object):
 
     def get_op(self, n_epochs=None, params_file=None,
                train_range='1-5', test_range='6'):
+        from convnet import ConvNet
         op = ConvNet.get_options_parser()
         load_dic = None
 
@@ -160,8 +190,7 @@ class Network(object):
         if os.path.exists(nengo_path):
             objs = np.load(nengo_path)
             kwargs = {k: objs[k] for k in ('dt', 'pt', 'labels', 't', 'y')}
-            top1errors, top5errors, _ = run_nengo.error_lims(
-                ct_start=ct_start, **kwargs)
+            top1errors, top5errors, _ = error_lims(ct_start=ct_start, **kwargs)
             self.nengo[key] = (top1errors.mean(), top5errors.mean())
 
 
@@ -192,9 +221,10 @@ def run_process(function, args=(), kwargs={}, max_time=None):
 def train_proc(network, **kwargs):
     log_path = os.path.join(save_dir, network.checkpoint_name() + '.log')
     real_stdout = sys.stdout
-    sys.stdout = open(log_path, 'a')
+    sys.stdout = open(log_path, 'w')
     convnet = None
     try:
+        from convnet import ConvNet
         np.random.seed(network.seed)
         op, load_dic = network.get_op(**kwargs)
         convnet = ConvNet(op, load_dic)
@@ -217,8 +247,9 @@ def test_numpy_proc(network):
     save_path = os.path.join(save_dir, network.numpy_name())
     log_path = save_path + '.log'
     real_stdout = sys.stdout
-    sys.stdout = open(log_path, 'a')
+    sys.stdout = open(log_path, 'w')
     try:
+        import run_numpy
         checkpoint_path = os.path.join(save_dir, network.checkpoint_name())
         layers, data, dp = run_numpy.load_network(checkpoint_path)
         outputs = run_numpy.compute_target_layer('logprob', layers, data)
@@ -237,8 +268,9 @@ def test_nengo_proc(network, pres_time, synapse_type, synapse_tau):
         pres_time, synapse_type, synapse_tau))
     log_path = save_path + '.log'
     real_stdout = sys.stdout
-    sys.stdout = open(log_path, 'a')
+    sys.stdout = open(log_path, 'w')
     try:
+        import run_nengo
         run_nengo.run(checkpoint_path, savefile=save_path, backend='nengo_ocl',
                       presentation_time=pres_time,
                       synapse_type=synapse_type, synapse_tau=synapse_tau)
