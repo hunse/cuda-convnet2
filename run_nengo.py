@@ -220,18 +220,7 @@ def run(loadfile, savefile=None, histload=None, count_spikes=False,
             round_layer(layer, 2**8, clip_percent=0)
 
     # --- build network in Nengo
-    network = nengo.Network()
-
-    # presentation_time = 0.02
-    # presentation_time = 0.03
-    # presentation_time = 0.04
-    # presentation_time = 0.05
-    # presentation_time = 0.06
-    # presentation_time = 0.08
-    # presentation_time = 0.1
-    # presentation_time = 0.13
-    # presentation_time = 0.15
-    # presentation_time = 0.2
+    network = nengo.Network(seed=0)  # seed not used, but just in case
 
     synapse = None
     if synapse_type == 'lowpass':
@@ -242,15 +231,6 @@ def run(loadfile, savefile=None, histload=None, count_spikes=False,
         raise ValueError("synapse type: %r" % synapse_type)
 
     network.config[nengo.Connection].synapse = synapse
-
-    # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.0)
-    # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.001)
-    # network.config[nengo.Connection].synapse = nengo.synapses.Lowpass(0.005)
-    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.001)
-    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.002)
-    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.003)
-    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.004)
-    # network.config[nengo.Connection].synapse = nengo.synapses.Alpha(0.005)
 
     outputs = build_target_layer(
         'logprob', layers, data, network, hists=hists, pt=presentation_time)
@@ -269,17 +249,17 @@ def run(loadfile, savefile=None, histload=None, count_spikes=False,
     if ocl_profile:
         # profile
         import nengo_ocl
-        sim = nengo_ocl.Simulator(network, profiling=True)
-        sim.run(presentation_time)
-        sim.print_profiling(sort=1)
+        with nengo_ocl.Simulator(network, profiling=True) as sim:
+            sim.run(presentation_time)
+            sim.print_profiling(sort=1)
     else:
         n = len(data[0])  # test on all examples
         if n_max is not None:
             n = min(n, n_max)
 
         print("Running %d examples for %0.3f s each" % (n, presentation_time))
-        sim = Simulator(network)
-        sim.run(n * presentation_time)
+        with Simulator(network) as sim:
+            sim.run(n * presentation_time)
 
     dt = sim.dt
     t = sim.trange()
