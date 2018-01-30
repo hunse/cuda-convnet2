@@ -30,4 +30,5 @@ savefile="./checkpoints/cifar10_ConvNet__$stamp"
 OPTS+=(--save-file "$savefile")
 
 python convnet.py "${DATA[@]}" "${LAYERS[@]}" "${OPTS[@]}" \
-    --init-only 1 --logreg-name logprob --test-range 6
+    --train-range 1-5 --test-range 6 --epochs 1 \
+    --init-only 1 --logreg-name logprob
