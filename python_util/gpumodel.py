@@ -128,7 +128,9 @@ class IGPUModel:
         pass
 
     def start(self):
-        if self.test_only:
+        if self.init_only:
+            self.init_save()
+        elif self.test_only:
             self.test_outputs += [self.get_test_error()]
             self.print_test_results()
         else:
@@ -137,6 +139,18 @@ class IGPUModel:
         if self.force_save:
             self.save_state().join()
         sys.exit(0)
+
+    def init_save(self):
+        print "========================="
+        print "Initializing %s" % self.model_name
+        self.op.print_values()
+        print "========================="
+        self.print_model_state()
+        # print "Running on CUDA device(s) %s" % ", ".join("%d" % d for d in self.device_ids)
+        # print "Current time: %s" % asctime(localtime())
+        # print "Saving checkpoints to %s" % self.save_file
+        # print "========================="
+        self.save_state().join()
 
     def train(self):
         print "========================="
@@ -315,6 +329,7 @@ class IGPUModel:
         op.add_option("data-path", "data_path", StringOptionParser, "Data path")
 
         op.add_option("max-test-err", "max_test_err", FloatOptionParser, "Maximum test error for saving")
+        op.add_option("init-only", "init_only", BooleanOptionParser, "Initialize, save, and quit?", default=0)
         op.add_option("test-only", "test_only", BooleanOptionParser, "Test and quit?", default=0)
         op.add_option("test-one", "test_one", BooleanOptionParser, "Test on one batch at a time?", default=1)
         op.add_option("force-save", "force_save", BooleanOptionParser, "Force save before quitting", default=0)
